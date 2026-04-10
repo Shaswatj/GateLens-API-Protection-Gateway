@@ -1,84 +1,217 @@
-# GateLens – API Protection Gateway
+```markdown
+# 🚀 GateLens – API Protection Gateway
 
-GateLens is a lightweight, security‑focused API gateway built with **Python (FastAPI)** and a **React/HTML dashboard**.  
-It sits between clients and backend APIs, enforcing **JWT authentication**, **API key validation**, **rate‑limiting**, and basic **SQL injection / XSS filtering**, while logging all traffic for real‑time monitoring.
-
----
-
-## Overview
-
-GateLens protects exposed APIs by adding a unified security layer that:
-
-- Intercepts all incoming API requests before they reach the backend.  
-- Validates **JWT tokens** and **API keys** for each request.  
-- Applies **rate‑limiting per IP** (for example, 10 requests per minute).  
-- Logs essential request details: IP address, endpoint, method, status, and timestamp.  
-- Forwards valid and allowed requests to the backend API and returns responses.  
-- Visualizes traffic and events in a real‑time **dashboard** (frontend UI).
+A lightweight, high-performance API gateway built with FastAPI that protects backend services from malicious requests using authentication, validation, and intelligent security checks.
 
 ---
 
-## Technologies Used
+## 📌 Overview
 
-- **Backend**: Python + FastAPI (asynchronous, type‑hinted API framework).  
-- **Server**: Uvicorn (ASGI server).  
-- **Authentication**: JWT (JSON Web Tokens).  
-- **API Security**: API key validation.  
-- **Rate Limiting**: SlowAPI / custom middleware (e.g., 10 requests per minute per IP).  
-- **Logging**: JSON‑based, structured request logs.  
-- **Frontend**: React.js (or HTML/CSS/JavaScript) dashboard UI.  
-- **Deployment**: Cloud platforms such as Render or similar.
+**GateLens** acts as a secure entry point between clients and backend services. It inspects incoming requests, applies multiple layers of security, and only forwards safe and authorized traffic.
+
+This project is designed to:
+- Prevent common web attacks (SQL Injection, Command Injection)
+- Enforce authentication and API access control
+- Protect backend services from abuse (rate limiting)
+- Provide visibility through logging and monitoring
+- Offer a simple dashboard for tracking activity
+
+It is ideal for learning API security concepts as well as building production-ready gateway systems.
 
 ---
 
-## Getting Started
+## 🧰 Tech Stack
 
-### Prerequisites
+- **Backend:** Python, FastAPI, Uvicorn  
+- **Security:** JWT Authentication, API Key Validation  
+- **Protection Modules:** Rate Limiting, Input Validation  
+- **Monitoring:** Logging System  
+- **Frontend:** React / HTML Dashboard  
 
-- Python 3.8+  
-- Node.js (if using React frontend)
+---
 
-### 1. Clone the repository
+## 📁 Project Structure
 
-```bash
-git clone https://github.com/YOUR-USERNAME/gate-lens-api-gateway.git
-cd gate-lens-api-gateway
 ```
 
-### 2. Install backend dependencies
+GateLens/
+│
+├── gateway.py              # Main entry point
+├── decision_engine.py      # Core request evaluation logic
+├── proxy.py                # Forwards request to backend
+│
+├── security/
+│   ├── auth.py             # JWT & API key validation
+│   ├── waf.py              # Injection detection (SQL, CMD)
+│   ├── rate_limiter.py     # Request throttling
+│   └── logger.py           # Logging & monitoring
+│
+├── frontend/
+│   └── dashboard/          # UI (React/HTML)
+│
+├── requirements.txt
+└── README.md
+
+````
+
+---
+
+## ⚙️ Setup Instructions
+
+### 1. Clone the Repository
+```bash
+git clone https://github.com/your-username/gatelens.git
+cd gatelens
+````
+
+### 2. Create Virtual Environment (Recommended)
+
+```bash
+python -m venv venv
+source venv/bin/activate   # Linux/Mac
+venv\Scripts\activate      # Windows
+```
+
+### 3. Install Dependencies
 
 ```bash
 pip install -r requirements.txt
 ```
 
-### 3. Run the FastAPI gateway
+### 4. Run the Server
 
 ```bash
-uvicorn backend.main:app --reload
+uvicorn gateway:app --reload
 ```
 
-### 4. Run the frontend
+### 5. Access the API
 
-For React:
-
-```bash
-cd frontend
-npm install
-npm start
 ```
-
-For simple HTML/JS:
-
-```bash
-cd frontend
-python -m http.server 8000
+http://127.0.0.1:8000
 ```
-
-Then open `http://localhost:8000` in the browser.
 
 ---
 
-## Purpose & Use Case
+## 🧪 How to Test
 
-GateLens is designed to help developers, startups, and students secure their APIs without relying on heavy enterprise tools.  
-It demonstrates practical API security patterns—authentication, rate‑limiting, and logging—in a lightweight, hackathon‑friendly prototype that is easy to understand, extend, and present.
+### ✅ Valid Request
+
+```bash
+curl -X GET "http://127.0.0.1:8000/api/data" \
+-H "Authorization: Bearer YOUR_JWT_TOKEN" \
+-H "x-api-key: YOUR_API_KEY"
+```
+
+### ❌ SQL Injection Attempt
+
+```bash
+curl -X GET "http://127.0.0.1:8000/api/data?id=1' OR '1'='1" \
+-H "Authorization: Bearer YOUR_JWT_TOKEN" \
+-H "x-api-key: YOUR_API_KEY"
+```
+
+### ❌ Missing Token
+
+```bash
+curl -X GET "http://127.0.0.1:8000/api/data"
+```
+
+---
+
+## 🔐 Required Headers
+
+| Header Name   | Description                   |
+| ------------- | ----------------------------- |
+| Authorization | Bearer JWT Token              |
+| x-api-key     | API key for client validation |
+
+Example:
+
+```
+Authorization: Bearer <token>
+x-api-key: <your-api-key>
+```
+
+---
+
+## ⚙️ How It Works
+
+1. **Request Received** → Client sends API request
+2. **Authentication Layer**
+
+   * JWT Token validation
+   * API Key verification
+3. **Security Checks (WAF)**
+
+   * SQL Injection detection
+   * Command Injection detection
+4. **Rate Limiting**
+
+   * Prevents abuse by limiting requests
+5. **Decision Engine**
+
+   * Allows or blocks request
+6. **Proxy Layer**
+
+   * Forwards safe request to backend service
+7. **Logging**
+
+   * Records request details for monitoring
+
+---
+
+## ⚠️ Common Issues & Fixes
+
+| Issue                          | Cause                | Fix                                   |
+| ------------------------------ | -------------------- | ------------------------------------- |
+| 401 Unauthorized               | Invalid/missing JWT  | Check token format and expiry         |
+| 403 Forbidden                  | Invalid API key      | Verify API key                        |
+| 429 Too Many Requests          | Rate limit exceeded  | Wait or increase limit                |
+| Server not starting            | Missing dependencies | Run `pip install -r requirements.txt` |
+| Injection blocked unexpectedly | Strict WAF rules     | Adjust detection patterns             |
+
+---
+
+## 👥 Best Practices for Team
+
+* Use environment variables for secrets (JWT keys, API keys)
+* Keep security modules modular and independent
+* Write logs for every blocked request
+* Avoid hardcoding credentials
+* Test edge cases (invalid tokens, malformed requests)
+* Maintain consistent code structure
+* Document any new feature before merging
+
+---
+
+## 💡 Use Cases
+
+* Protecting microservices architecture
+* Learning API security fundamentals
+* Building custom API gateways
+* Hackathon or academic projects
+* Lightweight alternative to heavy gateways
+
+---
+
+## 🔮 Future Improvements
+
+* Role-Based Access Control (RBAC)
+* AI-based anomaly detection
+* Advanced analytics dashboard
+* Integration with cloud gateways (AWS/Kong)
+* Caching layer for performance
+* Distributed rate limiting (Redis)
+* HTTPS & SSL support
+
+---
+
+## 📌 Final Note
+
+GateLens is designed to be simple, extensible, and practical.
+Feel free to enhance modules, improve detection logic, and scale it based on your needs.
+
+---
+
+```
+```
