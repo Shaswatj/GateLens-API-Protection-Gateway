@@ -10,6 +10,7 @@
             r'\bbenchmark\s*\(',
             r'\bload_file\s*\(',
             r'\binto\s+outfile\b',
+            r'\$ne\b',
         ],
         'score': 5,
     },

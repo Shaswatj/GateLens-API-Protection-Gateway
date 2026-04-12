@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>SentinelX Pro – Secure API Gateway</title>
+  <title>GateLens – Secure API Gateway</title>
 
   <style>
     :root {
@@ -370,6 +370,72 @@
       font-family: 'Courier New', monospace;
     }
 
+    .login-overlay {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background-color: rgba(10, 14, 23, 0.95);
+      z-index: 1000;
+      pointer-events: auto;
+    }
+
+    .login-panel {
+      width: min(480px, 95%);
+      background-color: var(--bg-panel);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 2em;
+      box-shadow: var(--shadow);
+    }
+
+    .login-panel {
+      width: min(480px, 95%);
+      background-color: var(--bg-panel);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 2em;
+      box-shadow: var(--shadow);
+    }
+
+    .login-panel h2 {
+      margin-bottom: 0.4em;
+      color: var(--text);
+    }
+
+    .login-panel p {
+      margin-bottom: 1.2em;
+      color: var(--text-muted);
+      font-size: 0.95em;
+      line-height: 1.5;
+    }
+
+    .login-panel label {
+      display: block;
+      margin-bottom: 1em;
+      color: var(--text-muted);
+      font-size: 0.95em;
+    }
+
+    .login-panel input {
+      width: 100%;
+      margin-top: 0.4em;
+      padding: 0.85em 0.9em;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background-color: #0f172a;
+      color: var(--text);
+      font-size: 0.95em;
+    }
+
+    .login-panel .login-error {
+      color: var(--accent-red);
+      margin-top: 1em;
+      min-height: 1.2em;
+      font-size: 0.95em;
+    }
+
     .abuse-block-count {
       color: var(--accent-yellow);
       font-weight: 600;
@@ -387,12 +453,32 @@
 
 <body>
   <nav class="navbar">
-    <div class="navbar-title">SentinelX Pro – Secure API Gateway</div>
+    <div class="navbar-title">GateLens – Secure API Gateway</div>
     <div>
       <span class="status-dot"></span>
       <span>Active / Secure</span>
+      <button class="primary" id="logout-btn" style="margin-left: 1em; font-size: 0.9em; padding: 0.45em 0.8em;">Logout</button>
     </div>
   </nav>
+
+  <div id="login-overlay" class="login-overlay">
+    <div class="login-panel">
+      <h2>GateLens Admin Login</h2>
+      <p>Enter credentials to access the gateway dashboard. Use <strong>admin/password</strong> or <strong>user/user</strong>.</p>
+      <form id="login-form">
+        <label>
+          Username
+          <input type="text" id="username" name="username" autocomplete="username" required />
+        </label>
+        <label>
+          Password
+          <input type="password" id="password" name="password" autocomplete="current-password" required />
+        </label>
+        <button type="submit" class="primary" id="login-btn">Sign In</button>
+      </form>
+      <div id="login-error" style="color:red; margin-top:10px;"></div>
+    </div>
+  </div>
 
   <div class="container">
 
@@ -401,17 +487,17 @@
       <div class="panel-title">Authentication Status</div>
       <div class="auth-row">
         <span class="auth-label">User</span>
-        <span class="auth-value">admin</span>
+        <span class="auth-value" id="auth-user">Not logged in</span>
       </div>
       <div class="auth-row">
         <span class="auth-label">Token</span>
-        <span class="auth-value">
-          <span class="status-tag status-valid">Valid</span>
+        <span class="auth-value" id="auth-token-status">
+          <span class="status-tag status-invalid">Not signed in</span>
         </span>
       </div>
       <div class="auth-row">
         <span class="auth-label">API Key</span>
-        <span class="auth-value">
+        <span class="auth-value" id="auth-api-key-status">
           <span class="status-tag status-valid">Valid</span>
         </span>
       </div>
@@ -535,10 +621,15 @@
       <div class="panel-title">Test Controls</div>
       <div class="control-buttons" style="display:flex; gap:0.8em; flex-wrap:wrap; align-items:center;">
         <button class="primary" id="normal-request">Normal Request</button>
-        <button class="primary" id="sql-request">SQL Injection Test</button>
-        <button class="primary" id="xss-request">XSS Test</button>
-        <button class="primary" id="send-test-request">Send Burst Test</button>
-        <button class="primary" id="stop-test-request" disabled>Stop Burst</button>
+        <button class="primary" id="sql-request">SQL Injection</button>
+        <button class="primary" id="xss-request">XSS</button>
+        <button class="primary" id="comment-request">Comment Bypass</button>
+        <button class="primary" id="encoded-request">Encoded Attack</button>
+        <button class="primary" id="malformed-request">Malformed Payload</button>
+        <button class="primary" id="unauthorized-request">Unauthorized Access</button>
+        <button class="primary" id="path-request">Path Attack</button>
+        <button class="primary" id="query-request">Query Attack</button>
+        <button class="primary" id="rate-request">Rate Limit</button>
       </div>
       <div id="test-status" style="font-size: 0.85em; margin-top: 0.8em; color: var(--text-muted);"></div>
       <div id="test-response" style="margin-top: 1em; padding: 0.8em; background-color: #111827; border-radius: 8px; border: 1px solid var(--border); color: var(--text-muted); font-size: 0.9em; white-space: pre-wrap;"></div>
@@ -547,105 +638,475 @@
   </div>
 
   <script>
-    // ============================================
-    // SentinelX Pro – API Gateway Dashboard
-    // Real-time data integration from FastAPI backend
-    // ============================================
-
-    // API Configuration
+    console.log("JS LOADED"); // DEBUG: Verify script execution
+    
     const API_URL = 'http://127.0.0.1:8000';
+    const API_KEY = 'hackathon2026';
+    const STORAGE_TOKEN_KEY = 'gatelens_access_token';
+    const STORAGE_USER_KEY = 'gatelens_user';
 
-    /**
-     * Determines the status CSS class and display text based on HTTP status code
-     * @param {number} statusCode - HTTP status code
-     * @returns {object} - { statusClass, statusText, color }
-     */
-    function getStatusClass(statusCode, reason) {
-      if (statusCode === 429) {
-        return {
-          statusClass: 'status-rate-limited',
-          statusText: 'Rate Limited',
-          color: 'var(--accent-yellow)'
-        };
-      } else if (statusCode >= 400) {
-        return {
-          statusClass: 'status-blocked',
-          statusText: 'Blocked',
-          color: 'var(--accent-red)'
-        };
-      } else if (reason && reason.toLowerCase().includes('waf alert')) {
-        return {
-          statusClass: 'status-alert',
-          statusText: 'Alert',
-          color: 'var(--accent-yellow)'
-        };
-      } else {
-        return {
-          statusClass: 'status-allowed',
-          statusText: 'Allowed',
-          color: 'var(--accent-green)'
-        };
+    let accessToken = null;
+    let currentUser = 'anonymous';
+    let currentRole = null;
+    let suppressLoginOverlayOn401 = false;  // Prevent re-showing overlay after login
+    let pollingTimers = {
+      metrics: null,
+      alerts: null,
+      waf: null,
+    };
+
+    function showLoginOverlay(show) {
+      console.log("[OVERLAY] showLoginOverlay(" + show + ")");
+      const overlay = document.getElementById('login-overlay');
+      if (!overlay) {
+        console.error("[OVERLAY] ERROR: overlay not found");
+        return;
+      }
+      overlay.style.display = show ? "flex" : "none";
+      console.log("[OVERLAY] display set to:", overlay.style.display);
+    }
+
+    function updateAuthUI() {
+      const userLabel = document.getElementById('auth-user');
+      const tokenStatus = document.getElementById('auth-token-status');
+      const apiKeyStatus = document.getElementById('auth-api-key-status');
+      const logoutButton = document.getElementById('logout-btn');
+
+      if (userLabel) {
+        userLabel.textContent = currentUser || 'anonymous';
+      }
+      if (tokenStatus) {
+        tokenStatus.innerHTML = accessToken
+          ? '<span class="status-tag status-valid">Valid</span>'
+          : '<span class="status-tag status-invalid">Not signed in</span>';
+      }
+      if (apiKeyStatus) {
+        apiKeyStatus.innerHTML = '<span class="status-tag status-valid">Valid</span>';
+      }
+      if (logoutButton) {
+        logoutButton.style.display = accessToken ? 'inline-flex' : 'none';
       }
     }
 
-    /**
-     * Formats a timestamp for display
-     * @param {string} timestamp - ISO or other timestamp format
-     * @returns {string} - Formatted time string (HH:MM:SS)
-     */
+    function saveSession(token, user, role) {
+      accessToken = token;
+      currentUser = user || 'anonymous';
+      currentRole = role || null;
+      localStorage.setItem(STORAGE_TOKEN_KEY, token);
+      localStorage.setItem(STORAGE_USER_KEY, JSON.stringify({ user: currentUser, role: currentRole }));
+      updateAuthUI();
+    }
+
+    function clearSession() {
+      accessToken = null;
+      currentUser = 'anonymous';
+      currentRole = null;
+      localStorage.removeItem(STORAGE_TOKEN_KEY);
+      localStorage.removeItem(STORAGE_USER_KEY);
+      updateAuthUI();
+    }
+
+    function getAuthHeaders(includeAuth = true) {
+      const headers = {
+        'Content-Type': 'application/json',
+        'X-API-Key': API_KEY,
+      };
+      if (includeAuth && accessToken) {
+        headers.Authorization = `Bearer ${accessToken}`;
+      }
+      return headers;
+    }
+
+    async function apiFetch(path, options = {}) {
+      if (!path.startsWith('/')) {
+        path = `/${path}`;
+      }
+      const url = `${API_URL}${path}`;
+      const opts = {
+        method: options.method || 'GET',
+        headers: { ...getAuthHeaders(options.includeAuth !== false), ...(options.headers || {}) },
+      };
+      if (options.body !== undefined) {
+        opts.body = options.body;
+      }
+
+      console.log("[APIFETCH] URL:", url);
+      console.log("[APIFETCH] Method:", opts.method);
+      console.log("[APIFETCH] Headers:", opts.headers);
+      console.log("[APIFETCH] Body:", opts.body ? opts.body.substring(0, 100) : 'none');
+      
+      try {
+        const response = await fetch(url, opts);
+        console.log("[APIFETCH] Response status:", response.status);
+        // Return ALL valid HTTP responses, don't throw on error status codes
+        // Let the caller decide how to handle 401, 403, etc.
+        return response;
+      } catch (error) {
+        // Network error: only fetch() failures reach here
+        console.error("[APIFETCH] Network error:", error.message);
+        console.error("[APIFETCH] Is frontend served from file://?", window.location.protocol);
+        console.error("[APIFETCH] Backend URL:", API_URL);
+        console.error("[APIFETCH] Full error:", error);
+        throw error;
+      }
+    }
+
+    async function login(username, password) {
+      console.log("[LOGIN] LOGIN FUNCTION CALLED");
+      try {
+        console.log("[LOGIN] Sending POST to /login");
+        const response = await fetch(`${API_URL}/login`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-API-Key": API_KEY
+          },
+          body: JSON.stringify({ username, password })
+        });
+
+        console.log("[LOGIN] Response status:", response.status);
+
+        // Try to parse JSON response
+        let data = {};
+        try {
+          data = await response.json();
+          console.log("[LOGIN] Parsed JSON response:", data);
+        } catch (parseErr) {
+          console.warn("[LOGIN] Response is not JSON:", parseErr.message);
+          data = {};
+        }
+
+        // Wrong credentials or other error
+        if (!response.ok) {
+          const msg = data.detail || data.message || `Login failed (${response.status})`;
+          console.log("[LOGIN] Login failed:", msg);
+          document.getElementById("login-error").innerText = msg;
+          return;
+        }
+
+        // Check token exists
+        if (!data.access_token) {
+          console.log("[LOGIN] No token in response");
+          document.getElementById("login-error").innerText = "Login failed: no token received";
+          return;
+        }
+
+        console.log("[LOGIN] Login successful");
+        
+        // Store token
+        accessToken = data.access_token;
+        localStorage.setItem("accessToken", data.access_token);
+        currentUser = username;
+        updateAuthUI();
+        
+        // Clear error and hide overlay
+        document.getElementById("login-error").innerText = "";
+        console.log("[LOGIN] Hiding overlay");
+        showLoginOverlay(false);
+
+        // Load dashboard
+        try {
+          await Promise.all([fetchDashboard(), fetchAlerts(), fetchWAFAlerts()]);
+        } catch (e) {
+          console.warn("[LOGIN] Initial load error:", e.message);
+        } finally {
+          suppressLoginOverlayOn401 = false;
+          startPolling();
+        }
+
+      } catch (err) {
+        console.error("[LOGIN] Exception:", err.message);
+        document.getElementById("login-error").innerText = "Network error. Try again.";
+      }
+    }
+
+    function logout() {
+      clearSession();
+      showLoginOverlay(true);
+      stopPolling();
+      updateTestStatus('Logged out. Please sign in again.', 'var(--accent-yellow)');
+    }
+
+    async function restoreSession() {
+      console.log("[RESTORE] Checking for saved session");
+      const savedToken = localStorage.getItem("accessToken");
+      const savedUser = localStorage.getItem(STORAGE_USER_KEY);
+      if (savedToken && savedUser) {
+        accessToken = savedToken;
+        try {
+          const sessionInfo = JSON.parse(savedUser);
+          currentUser = sessionInfo.user || 'anonymous';
+          currentRole = sessionInfo.role || null;
+        } catch {
+          currentUser = 'anonymous';
+          currentRole = null;
+        }
+        updateAuthUI();
+        try {
+          const response = await apiFetch('/metrics');
+          if (response.ok) {
+            console.log('[RESTORE] Session restored successfully');
+            showLoginOverlay(false);
+            return true;
+          } else if (response.status === 401) {
+            console.log('[RESTORE] Token invalid (401), clearing session');
+            clearSession();
+            showLoginOverlay(true);
+            return false;
+          } else {
+            // Other errors don't invalidate the session
+            console.warn('[RESTORE] Metrics request failed with status', response.status, '- keeping token');
+            showLoginOverlay(false);
+            return true;
+          }
+        } catch (err) {
+          // Network error or other issue - keep session and let polling retry
+          console.warn('[RESTORE] Metrics request failed:', err.message, '- keeping token');
+          showLoginOverlay(false);
+          return true;
+        }
+      }
+      showLoginOverlay(true);
+      return false;
+    }
+
+    function startPolling() {
+      stopPolling();
+      
+      // Schedule polling with completion-based rescheduling (prevents backlog)
+      async function pollMetrics() {
+        try {
+          await fetchDashboard();
+        } catch (error) {
+          console.warn('[POLLING] Metrics poll error:', error.message);
+        }
+        if (accessToken) {  // Only reschedule if still logged in
+          pollingTimers.metrics = setTimeout(pollMetrics, 3000);
+        }
+      }
+      
+      async function pollAlerts() {
+        try {
+          await fetchAlerts();
+        } catch (error) {
+          console.warn('[POLLING] Alerts poll error:', error.message);
+        }
+        if (accessToken) {
+          pollingTimers.alerts = setTimeout(pollAlerts, 5000);
+        }
+      }
+      
+      async function pollWAF() {
+        try {
+          await fetchWAFAlerts();
+        } catch (error) {
+          console.warn('[POLLING] WAF poll error:', error.message);
+        }
+        if (accessToken) {
+          pollingTimers.waf = setTimeout(pollWAF, 5000);
+        }
+      }
+      
+      // Start first cycle
+      pollingTimers.metrics = setTimeout(pollMetrics, 3000);
+      pollingTimers.alerts = setTimeout(pollAlerts, 5000);
+      pollingTimers.waf = setTimeout(pollWAF, 5000);
+    }
+
+    function stopPolling() {
+      Object.values(pollingTimers).forEach(timer => {
+        if (timer) {
+          clearTimeout(timer);  // Works for both setTimeout and setInterval timers
+        }
+      });
+      pollingTimers.metrics = null;
+      pollingTimers.alerts = null;
+      pollingTimers.waf = null;
+    }
+
+    function getStatusClass(statusCode, reason) {
+      const normalizedReason = String(reason || '').toLowerCase();
+      if (statusCode === 429 || normalizedReason.includes('rate_limit')) {
+        return { statusClass: 'status-rate-limited', statusText: 'Rate Limited', color: 'var(--accent-yellow)' };
+      }
+      if (statusCode >= 400) {
+        return { statusClass: 'status-blocked', statusText: 'Blocked', color: 'var(--accent-red)' };
+      }
+      if (normalizedReason.includes('alert') || normalizedReason.includes('waf')) {
+        return { statusClass: 'status-alert', statusText: 'Alert', color: 'var(--accent-yellow)' };
+      }
+      return { statusClass: 'status-allowed', statusText: 'Allowed', color: 'var(--accent-green)' };
+    }
+
     function formatTime(timestamp) {
       try {
-        const date = new Date(timestamp);
-        return date.toLocaleTimeString();
+        return new Date(timestamp).toLocaleTimeString();
       } catch {
         return timestamp;
       }
     }
 
-    /**
-     * Fetches and displays security alerts
-     */
-    async function fetchAlerts() {
+    function updateTestStatus(message, color = 'var(--accent-blue)') {
+      const statusEl = document.getElementById('test-status');
+      if (!statusEl) return;
+      statusEl.textContent = message;
+      statusEl.style.color = color;
+    }
+
+    function updateResponsePanel(text) {
+      const responseEl = document.getElementById('test-response');
+      if (!responseEl) return;
+      responseEl.textContent = text;
+    }
+
+    async function requestUnauthorizedAdmin() {
+      console.log("[REQUEST] Sending unauthorized admin request");
+      updateTestStatus('Performing unauthorized RBAC test...');
       try {
-        const response = await fetch(`${API_URL}/alerts`);
-        if (!response.ok) return;
+        console.log("[REQUEST] Step 1: Logging in as user/user");
+        const loginResponse = await apiFetch('/login', {
+          method: 'POST',
+          includeAuth: false,
+          body: JSON.stringify({ username: 'user', password: 'user' }),
+        });
         
-        const data = await response.json();
+        console.log("[REQUEST] Login response status:", loginResponse.status);
         
-        // Update abusive IPs list in alerts-panel
-        const abusiveIpsList = document.getElementById('abusive-ips-list');
-        if (data.top_abusive_ips && data.top_abusive_ips.length > 0) {
-          abusiveIpsList.innerHTML = data.top_abusive_ips
-            .map(item => `
-              <div class="alert-item">
-                <div class="alert-ip">${item.ip}</div>
-                <div class="alert-meta">Blocks: ${item.block_count}</div>
-              </div>
-            `)
-            .join('');
-        } else {
-          abusiveIpsList.innerHTML = '<span style="color: var(--text-muted); font-size: 0.85em;">No threats detected</span>';
+        if (!loginResponse.ok) {
+          // Try to read body for error message
+          let errorText = '';
+          try {
+            errorText = await loginResponse.text();
+          } catch {
+            errorText = loginResponse.statusText || 'Unknown error';
+          }
+          const msg = `User login failed ${loginResponse.status}: ${errorText}`;
+          console.error("[REQUEST] Error:", msg);
+          throw new Error(msg);
         }
         
-        // NOTE: WAF blocks are now rendered by fetchWAFAlerts() in the main WAF Alerts panel
-        // This avoids duplicate/conflicting displays
+        // Parse login response safely
+        let data = {};
+        try {
+          data = await loginResponse.json();
+        } catch (parseErr) {
+          console.error("[REQUEST] Login response is not JSON:", parseErr.message);
+          throw new Error('Login response is not JSON');
+        }
+        
+        const tempToken = data.access_token;
+        if (!tempToken) {
+          throw new Error('No access token in login response');
+        }
+        
+        console.log("[REQUEST] Got temporary token for user account");
+
+        console.log("[REQUEST] Step 2: Attempting to access /admin endpoint");
+        const response = await fetch(`${API_URL}/admin`, {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-API-Key': API_KEY,
+            Authorization: `Bearer ${tempToken}`,
+          },
+        });
+        
+        console.log("[RESPONSE] Admin endpoint status:", response.status);
+        
+        let statusMsg = '';
+        let statusColor = 'var(--accent-green)';
+        
+        if (response.status === 401) {
+          statusMsg = 'Unauthorized - Authentication failed';
+          statusColor = 'var(--accent-red)';
+          console.warn("[RESPONSE] 401 Unauthorized");
+        } else if (response.status === 403) {
+          statusMsg = 'Forbidden - Access denied (API key issue)';
+          statusColor = 'var(--accent-red)';
+          console.warn("[RESPONSE] 403 Forbidden");
+        } else if (!response.ok) {
+          statusMsg = `Error ${response.status}`;
+          statusColor = 'var(--accent-red)';
+          console.warn("[RESPONSE] Error:", response.status);
+        } else {
+          statusMsg = 'Success - unexpected!';
+          console.warn("[RESPONSE] Unexpectedly succeeded");
+        }
+        
+        let text = '';
+        try {
+          text = await response.text();
+        } catch (readErr) {
+          console.error("[RESPONSE] Error reading response:", readErr.message);
+          text = `[Error reading response: ${readErr.message}]`;
+        }
+        
+        const wafStatus = response.headers.get('x-waf-status') || 'unknown';
+        const wafReason = response.headers.get('x-waf-reason') || 'unknown';
+        
+        console.log("[RESPONSE] WAF Status:", wafStatus);
+        console.log("[RESPONSE] WAF Reason:", wafReason);
+        
+        updateResponsePanel(`Status: ${response.status}\nWAF Status: ${wafStatus}\nWAF Reason: ${wafReason}\nResponse:\n${text}`);
+        updateTestStatus(`Completed unauthorized RBAC test - ${statusMsg}`, statusColor);
+        await Promise.all([fetchDashboard(), fetchAlerts(), fetchWAFAlerts()]);
       } catch (error) {
-        console.error('Failed to fetch alerts:', error);
+        console.error("[REQUEST] Exception:", error.message);
+        updateResponsePanel(`Error: ${error.message}`);
+        updateTestStatus('Unauthorized test failed', 'var(--accent-red)');
       }
+    }
+
+    function renderTrafficTable(logs) {
+      const tableBody = document.getElementById('traffic-body');
+      if (!tableBody) return;
+      const recent = (logs || []).slice(-30).reverse();
+      tableBody.innerHTML = recent.map(log => {
+        const status = getStatusClass(log.status || 200, log.reason);
+        return `
+          <tr>
+            <td>${formatTime(log.time)}</td>
+            <td>${log.ip || 'N/A'}</td>
+            <td>${log.endpoint || 'N/A'}</td>
+            <td>${log.method || 'GET'}</td>
+            <td class="status-cell ${status.statusClass}">
+              <span class="status-dot-small" style="background-color: ${status.color};"></span>
+              <span class="status-text">${status.statusText}</span>
+            </td>
+            <td>${log.reason || ''}</td>
+          </tr>
+        `;
+      }).join('');
     }
 
     async function fetchDashboard() {
       try {
-        const response = await fetch(`${API_URL}/metrics`);
+        const response = await apiFetch('/metrics');
         if (!response.ok) {
+          console.warn('[FETCH] Metrics response not ok:', response.status);
           throw new Error(`Metrics error: ${response.status}`);
         }
-
-        const data = await response.json();
+        
+        let data = {};
+        try {
+          data = await response.json();
+        } catch (parseErr) {
+          console.warn('[FETCH] Metrics response is not JSON:', parseErr.message);
+          return; // Exit gracefully
+        }
+        
+        // Validate response is an object
+        if (!data || typeof data !== 'object') {
+          throw new Error(`Invalid metrics response: expected object, got ${typeof data}`);
+        }
+        
         document.getElementById('metric-total-requests').textContent = data.total_requests || 0;
         document.getElementById('metric-total-blocked').textContent = data.total_blocked || 0;
-        document.getElementById('metric-response-time').textContent = (data.avg_response_time_ms || 0).toFixed(2) + ' ms';
-        document.getElementById('metric-realtime-requests').textContent = data.total_requests ? Math.min(data.total_requests, 100) : 0;
+        document.getElementById('metric-response-time').textContent = `${(data.avg_response_time_ms || 0).toFixed(2)} ms`;
+        document.getElementById('metric-realtime-requests').textContent = data.requests_this_minute || 0;
+        document.getElementById('rate-current').textContent = data.requests_this_minute || 0;
+        document.getElementById('rate-total').textContent = data.rate_limit || 0;
+        document.getElementById('rate-fill').style.width = `${Math.min(100, ((data.requests_this_minute || 0) / (data.rate_limit || 1)) * 100)}%`;
 
         const logsList = document.getElementById('logs-list');
         logsList.innerHTML = '';
@@ -655,24 +1116,70 @@
           line.textContent = `[${formatTime(log.time)}] ${log.method || 'GET'} ${log.endpoint || ''} - ${log.status || 0}${log.reason ? ` (${log.reason})` : ''}`;
           logsList.appendChild(line);
         });
+        renderTrafficTable(data.logs || []);
       } catch (error) {
-        console.error('Failed to fetch metrics:', error);
+        console.error('[FETCH] Failed to fetch metrics:', error);
       }
     }
 
-    /**
-     * Fetches and displays WAF alerts: recent blocks, alerts, and top abusive IPs
-     */
+    async function fetchAlerts() {
+      try {
+        const response = await apiFetch('/alerts');
+        if (!response.ok) {
+          console.warn('[FETCH] Alerts response not ok:', response.status);
+          throw new Error(`Alerts error: ${response.status}`);
+        }
+        
+        let data = {};
+        try {
+          data = await response.json();
+        } catch (parseErr) {
+          console.warn('[FETCH] Alerts response is not JSON:', parseErr.message);
+          return; // Exit gracefully
+        }
+        
+        // Validate response is an object
+        if (!data || typeof data !== 'object') {
+          throw new Error(`Invalid alerts response: expected object, got ${typeof data}`);
+        }
+        
+        const abusiveIpsList = document.getElementById('abusive-ips-list');
+        if (data.top_abusive_ips && data.top_abusive_ips.length > 0) {
+          abusiveIpsList.innerHTML = data.top_abusive_ips.map(item => `
+            <div class="alert-item">
+              <div class="alert-ip">${item.ip}</div>
+              <div class="alert-meta">Blocks: ${item.block_count}</div>
+            </div>
+          `).join('');
+        } else {
+          abusiveIpsList.innerHTML = '<span style="color: var(--text-muted); font-size: 0.85em;">No threats detected</span>';
+        }
+      } catch (error) {
+        console.error('[FETCH] Failed to fetch alerts:', error);
+      }
+    }
+
     async function fetchWAFAlerts() {
       try {
-        const response = await fetch(`${API_URL}/waf-alerts`);
+        const response = await apiFetch('/waf-alerts');
         if (!response.ok) {
-          throw new Error(`API error: ${response.status}`);
+          console.warn('[FETCH] WAF alerts response not ok:', response.status);
+          throw new Error(`WAF alerts error: ${response.status}`);
         }
-
-        const data = await response.json();
-
-        // Populate WAF blocks table (includes both blocks AND alerts)
+        
+        let data = {};
+        try {
+          data = await response.json();
+        } catch (parseErr) {
+          console.warn('[FETCH] WAF alerts response is not JSON:', parseErr.message);
+          return; // Exit gracefully
+        }
+        
+        // Validate response is an object
+        if (!data || typeof data !== 'object') {
+          throw new Error(`Invalid WAF alerts response: expected object, got ${typeof data}`);
+        }
+        
         const wafBlocksBody = document.getElementById('waf-blocks-tbody');
         if (data.last_waf_blocks && data.last_waf_blocks.length > 0) {
           wafBlocksBody.innerHTML = data.last_waf_blocks.map(block => {
@@ -680,18 +1187,18 @@
             const backgroundColor = isBlock ? 'rgba(229, 57, 53, 0.1)' : 'rgba(246, 168, 0, 0.1)';
             const borderColor = isBlock ? 'var(--accent-red)' : '#f6a800';
             return `
-            <tr style="background-color: ${backgroundColor};">
-              <td>${formatTime(block.time)}</td>
-              <td><code style="color: var(--accent-yellow); font-size: 0.8em;">${block.ip}</code></td>
-              <td style="font-size: 0.8em;">${block.endpoint}</td>
-              <td><span class="waf-reason" style="border-left: 3px solid ${borderColor}; padding-left: 0.4em; display: block;">${block.reason}${isBlock ? ' [BLOCK]' : ' [ALERT]'}</span></td>
-            </tr>
-          `}).join('');
+              <tr style="background-color: ${backgroundColor};">
+                <td>${formatTime(block.time)}</td>
+                <td><code style="color: var(--accent-yellow); font-size: 0.8em;">${block.ip}</code></td>
+                <td style="font-size: 0.8em;">${block.endpoint}</td>
+                <td><span class="waf-reason" style="border-left: 3px solid ${borderColor}; padding-left: 0.4em; display: block;">${block.reason}${isBlock ? ' [BLOCK]' : ' [ALERT]'}</span></td>
+              </tr>
+            `;
+          }).join('');
         } else {
           wafBlocksBody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: var(--text-muted);">No blocks or alerts detected</td></tr>`;
         }
 
-        // Populate abuse IPs list
         const abuseContainer = document.getElementById('abuse-ips-container');
         if (data.top_abuse_ips && data.top_abuse_ips.length > 0) {
           abuseContainer.innerHTML = data.top_abuse_ips.map(item => `
@@ -703,293 +1210,246 @@
         } else {
           abuseContainer.innerHTML = '<div style="color: var(--text-muted); font-size: 0.85em;">No abusive activity detected</div>';
         }
-
       } catch (error) {
-        console.error('Failed to fetch WAF alerts:', error);
+        console.error('[FETCH] Failed to fetch WAF alerts:', error);
       }
     }
 
-    let testRequestInterval = null;
-    let isSendingTestRequests = false;
-    const TEST_API_KEY = 'hackathon2026';
-
-    function updateTestStatus(message, color = 'var(--text-muted)') {
-      const statusDiv = document.getElementById('test-status');
-      if (statusDiv) {
-        statusDiv.textContent = message;
-        statusDiv.style.color = color;
-      }
-    }
-
-    function updateResponsePanel(text) {
-      const panel = document.getElementById('test-response');
-      if (panel) panel.textContent = text;
-    }
-
-    async function getGatewayToken() {
+    async function performTestRequest(path, method = 'GET', payload = null, raw = false) {
       try {
-        const response = await fetch(`${API_URL}/login`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'X-API-Key': TEST_API_KEY,
-          },
-          body: JSON.stringify({ username: 'admin', password: 'password' }),
-        });
-        if (!response.ok) {
-          throw new Error(`Login failed ${response.status}`);
-        }
-        const data = await response.json();
-        return data.access_token;
-      } catch (error) {
-        updateTestStatus('Unable to get token', 'var(--accent-red)');
-        throw error;
-      }
-    }
-
-    async function performTestRequest(path, method = 'GET', payload = null) {
-      try {
+        console.log("[REQUEST] Sending attack request");
+        console.log("[REQUEST] Method:", method);
+        console.log("[REQUEST] Path:", path);
+        console.log("[REQUEST] Payload:", payload);
+        console.log("[REQUEST] AccessToken exists:", !!accessToken);
+        console.log("[REQUEST] Frontend origin:", window.location.origin);
+        console.log("[REQUEST] Backend URL:", API_URL);
+        
         updateTestStatus(`Sending ${method} ${path}`);
-        const token = await getGatewayToken();
         const options = {
           method,
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`,
-          },
+          headers: getAuthHeaders(),
         };
-        if (payload !== null) options.body = JSON.stringify(payload);
+        if (payload !== null) {
+          options.body = raw ? payload : JSON.stringify(payload);
+        }
 
-        const start = performance.now();
-        const response = await fetch(`${API_URL}${path}`, options);
-        const duration = Math.round(performance.now() - start);
-        const bodyText = await response.text();
-        updateResponsePanel(`Status: ${response.status}\nTime: ${duration} ms\nResponse:\n${bodyText}`);
-        updateTestStatus(`Completed ${path} - ${response.status}`, response.ok ? 'var(--accent-green)' : 'var(--accent-red)');
+        console.log("[REQUEST] Headers:", options.headers);
+        
+        let response;
+        try {
+          response = await apiFetch(path, options);
+        } catch (fetchError) {
+          // Real network error (fetch() itself failed)
+          const errorMsg = fetchError.message;
+          const diagMsg = `Network Error: ${errorMsg}\n\nDiagnostics:\n- Frontend protocol: ${window.location.protocol}\n- Backend URL: ${API_URL}\n- Is backend running? Check http://127.0.0.1:8000/docs\n- Is frontend served via HTTP (not file://)? Current: ${window.location.protocol}//\n- Check browser console for CORS errors`;
+          
+          console.error("[REQUEST] Network error details:", {
+            message: errorMsg,
+            frontendProtocol: window.location.protocol,
+            backendURL: API_URL,
+            isFileProtocol: window.location.protocol === 'file:'
+          });
+          
+          updateResponsePanel(diagMsg);
+          updateTestStatus(`Failed to fetch: ${errorMsg}`, 'var(--accent-red)');
+          return;
+        }
+        
+        console.log("[RESPONSE] Status:", response.status);
+        console.log("[RESPONSE] Response received");
+        
+        // Handle different status codes (all are valid HTTP responses)
+        let statusMsg = '';
+        let statusColor = 'var(--accent-green)';
+        
+        if (response.status === 401) {
+          statusMsg = 'Unauthorized - Please log in again';
+          statusColor = 'var(--accent-red)';
+          console.warn("[RESPONSE] 401 Unauthorized");
+          // Show login overlay for 401
+          suppressLoginOverlayOn401 = false;
+          clearSession();
+          showLoginOverlay(true);
+        } else if (response.status === 403) {
+          statusMsg = 'Forbidden (API key or permission issue)';
+          statusColor = 'var(--accent-red)';
+          console.warn("[RESPONSE] 403 Forbidden");
+        } else if (!response.ok) {
+          statusMsg = `HTTP Error ${response.status}`;
+          statusColor = 'var(--accent-red)';
+          console.warn("[RESPONSE] Error status:", response.status);
+        } else {
+          statusMsg = `Success ${response.status}`;
+          console.log("[RESPONSE] Success");
+        }
+        
+        // Read response body safely
+        let bodyText = '';
+        try {
+          bodyText = await response.text();
+          console.log("[RESPONSE] Body read successfully, length:", bodyText.length);
+        } catch (bodyError) {
+          console.error("[RESPONSE] Error reading response body:", bodyError.message);
+          bodyText = `[Unable to read response body: ${bodyError.message}]`;
+        }
+        
+        const wafStatus = response.headers.get('x-waf-status') || 'unknown';
+        const wafReason = response.headers.get('x-waf-reason') || 'unknown';
+
+        console.log("[RESPONSE] WAF Status:", wafStatus);
+        console.log("[RESPONSE] WAF Reason:", wafReason);
+
+        updateResponsePanel(`Status: ${response.status}\nWAF Status: ${wafStatus}\nWAF Reason: ${wafReason}\nResponse:\n${bodyText}`);
+        updateTestStatus(`Completed ${path} - ${statusMsg}`, statusColor);
+        
+        await Promise.all([fetchDashboard(), fetchAlerts(), fetchWAFAlerts()]);
       } catch (error) {
-        updateResponsePanel(`Error: ${error.message}`);
-        updateTestStatus('Request failed', 'var(--accent-red)');
+        console.error("[REQUEST] Uncaught exception:", error);
+        updateResponsePanel(`Unexpected error: ${error.message}`);
+        updateTestStatus('Request error - ' + error.message, 'var(--accent-red)');
       }
     }
 
     function bindTestButtons() {
-      document.getElementById('normal-request')?.addEventListener('click', () => performTestRequest('/users', 'GET'));
-      document.getElementById('sql-request')?.addEventListener('click', () => performTestRequest('/test-waf', 'POST', { query: '1 UNION SELECT password FROM users' }));
-      document.getElementById('xss-request')?.addEventListener('click', () => performTestRequest('/test-waf', 'POST', { input: '<script>alert(1)</script>' }));
-
-      const burstButton = document.getElementById('send-test-request');
-      const stopButton = document.getElementById('stop-test-request');
-      burstButton?.addEventListener('click', () => {
-        if (isSendingTestRequests) return;
-        isSendingTestRequests = true;
-        burstButton.disabled = true;
-        stopButton.disabled = false;
-        updateTestStatus('Burst mode started...');
-        updateResponsePanel('');
-        sendBurstRequests();
-        testRequestInterval = setInterval(sendBurstRequests, 4000);
+      console.log("[BIND] Binding all event listeners");
+      
+      // Bind test buttons (dashboard testing)
+      document.getElementById('normal-request')?.addEventListener('click', () => {
+        console.log("[ATTACK] ATTACK BUTTON CLICKED - normal-request");
+        performTestRequest('/users', 'GET');
       });
-      stopButton?.addEventListener('click', () => {
-        if (testRequestInterval) clearInterval(testRequestInterval);
-        testRequestInterval = null;
-        isSendingTestRequests = false;
-        burstButton.disabled = false;
-        stopButton.disabled = true;
-        updateTestStatus('Burst mode stopped.', 'var(--accent-green)');
+      
+      document.getElementById('sql-request')?.addEventListener('click', () => {
+        console.log("[ATTACK] ATTACK BUTTON CLICKED - sql-request");
+        performTestRequest('/test-waf', 'POST', { query: '1 UNION SELECT password FROM users' });
       });
-    }
-
-    async function sendBurstRequests() {
-      await performTestRequest('/users', 'GET');
-      await performTestRequest('/test-waf', 'POST', { query: '1 UNION SELECT password FROM users' });
-      await performTestRequest('/test-waf', 'POST', { input: '<script>alert(1)</script>' });
-    }
-
-    function appendTrafficRow(log) {
-      const tableBody = document.getElementById('traffic-body');
-      if (!tableBody) return;
-
-      const status = getStatusClass(log.status || 200, log.reason);
-      const row = document.createElement('tr');
-      row.innerHTML = `
-        <td>${formatTime(log.time)}</td>
-        <td>${log.ip || 'N/A'}</td>
-        <td>${log.endpoint || 'N/A'}</td>
-        <td>${log.method || 'GET'}</td>
-        <td class="status-cell ${status.statusClass}">
-          <span class="status-dot-small" style="background-color: ${status.color};"></span>
-          <span class="status-text">${status.statusText}</span>
-        </td>
-        <td>${log.reason || ''}</td>
-      `;
-      tableBody.prepend(row);
-      while (tableBody.childNodes.length > 100) {
-        tableBody.removeChild(tableBody.lastChild);
-      }
-    }
-
-    function appendLogLine(log) {
-      const logsList = document.getElementById('logs-list');
-      if (!logsList) return;
-      const logLine = document.createElement('div');
-      logLine.className = 'log-line';
-      logLine.textContent = `[${formatTime(log.time)}] ${log.method || 'GET'} ${log.endpoint || 'N/A'} - ${log.status || 0} from ${log.ip || 'N/A'}${log.reason ? ` (${log.reason})` : ''}`;
-      logsList.prepend(logLine);
-      while (logsList.childNodes.length > 100) {
-        logsList.removeChild(logsList.lastChild);
-      }
-    }
-
-    async function sendSingleTestRequest(requestDef) {
-      const start = Date.now();
-      const url = `${API_URL}${requestDef.path}`;
-      const headers = {
-        Authorization: `Bearer ${TEST_TOKEN}`,
-        'Content-Type': 'application/json',
-        'X-API-Key': TEST_API_KEY
-      };
-      const options = {
-        method: requestDef.method,
-        headers,
-      };
-      if (requestDef.body) {
-        options.body = JSON.stringify(requestDef.body);
-      }
-
-      try {
-        const response = await fetch(url, options);
-        const elapsed = Date.now() - start;
-        const status = response.status;
-        let responseBody = null;
-        try {
-          responseBody = await response.json();
-        } catch {
-          responseBody = await response.text();
+      
+      document.getElementById('xss-request')?.addEventListener('click', () => {
+        console.log("[ATTACK] ATTACK BUTTON CLICKED - xss-request");
+        performTestRequest('/test-waf', 'POST', { input: '<script>alert(1)<' + '/script>' });
+      });
+      
+      document.getElementById('comment-request')?.addEventListener('click', () => {
+        console.log("[ATTACK] ATTACK BUTTON CLICKED - comment-request");
+        performTestRequest('/test-waf', 'POST', { query: 'UNION/**/SELECT password FROM users' });
+      });
+      
+      document.getElementById('encoded-request')?.addEventListener('click', () => {
+        console.log("[ATTACK] ATTACK BUTTON CLICKED - encoded-request");
+        performTestRequest('/test-waf', 'POST', { query: '%55NION%20SELECT' });
+      });
+      
+      document.getElementById('malformed-request')?.addEventListener('click', () => {
+        console.log("[ATTACK] ATTACK BUTTON CLICKED - malformed-request");
+        performTestRequest('/test-waf', 'POST', '{"input": "bad-json",', true);
+      });
+      
+      document.getElementById('unauthorized-request')?.addEventListener('click', () => {
+        console.log("[ATTACK] ATTACK BUTTON CLICKED - unauthorized-request");
+        requestUnauthorizedAdmin();
+      });
+      
+      document.getElementById('path-request')?.addEventListener('click', () => {
+        console.log("[ATTACK] ATTACK BUTTON CLICKED - path-request");
+        performTestRequest('/users/../../etc/passwd', 'GET');
+      });
+      
+      document.getElementById('query-request')?.addEventListener('click', () => {
+        console.log("[ATTACK] ATTACK BUTTON CLICKED - query-request");
+        performTestRequest('/users?search=' + encodeURIComponent('name=1 OR 1=1'), 'GET');
+      });
+      
+      document.getElementById('rate-request')?.addEventListener('click', async () => {
+        console.log("[ATTACK] ATTACK BUTTON CLICKED - rate-request");
+        updateTestStatus('Sending rate-limit burst...');
+        const requests = [];
+        for (let i = 0; i < 35; i += 1) {
+          requests.push(performTestRequest('/users', 'GET'));
         }
-        const wafReason = response.headers.get('x-waf-reason');
+        await Promise.all(requests);
+      });
+      document.getElementById('logout-btn')?.addEventListener('click', logout);
+      
+      // CRITICAL: Login form submission
+      document.getElementById('login-form').addEventListener('submit', async event => {
+        console.log("[FORM] Form submitted");
+        event.preventDefault();
+        
+        const username = document.getElementById('username').value.trim();
+        const password = document.getElementById('password').value.trim();
+        
+        console.log("[FORM] Username: " + username);
+        
+        if (!username || !password) {
+          console.log("[FORM] Validation failed - missing fields");
+          document.getElementById('login-error').innerText = 'Username and password are required.';
+          return;
+        }
+        
+        console.log("[FORM] Calling login()");
+        await login(username, password);
+      });
+    }
 
-        console.log(`Test request: ${requestDef.method} ${requestDef.path}, status: ${status}, wafReason: ${wafReason}`);
-
-        const responseDetail = typeof responseBody === 'object' && responseBody !== null
-          ? responseBody.detail || JSON.stringify(responseBody)
-          : responseBody;
-
-        const logEntry = {
-          time: new Date().toISOString(),
-          ip: '127.0.0.1',
-          endpoint: requestDef.path,
-          method: requestDef.method,
-          status,
-          reason: wafReason || (status >= 400 ? responseDetail : ''),
-          response: responseBody,
-          response_time_ms: elapsed
-        };
-        appendTrafficRow(logEntry);
-        appendLogLine(logEntry);
-
-        return status;
-      } catch (error) {
-        const failedEntry = {
-          time: new Date().toISOString(),
-          ip: '127.0.0.1',
-          endpoint: requestDef.path,
-          method: requestDef.method,
-          status: 0,
-          response: error.message,
-          response_time_ms: Date.now() - start
-        };
-        appendTrafficRow(failedEntry);
-        appendLogLine(failedEntry);
-        console.error('Test request error:', error);
-        return 0;
+    async function diagnosticCheck() {
+      console.log("=============== FRONTEND DIAGNOSTIC CHECK ===============");
+      console.log("1. Frontend Protocol:", window.location.protocol);
+      console.log("2. Frontend Origin:", window.location.origin);
+      console.log("3. Backend URL:", API_URL);
+      console.log("4. Testing backend connectivity...");
+      
+      try {
+        const healthResponse = await fetch(`${API_URL}/health`, {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-API-Key': API_KEY
+          }
+        });
+        console.log("5. Backend health check:", healthResponse.status, healthResponse.ok);
+        const healthData = await healthResponse.json();
+        console.log("   Response:", healthData);
+        console.log("✅ BACKEND IS REACHABLE");
+        return true;
+      } catch (err) {
+        console.error("❌ BACKEND IS NOT REACHABLE");
+        console.error("   Error:", err.message);
+        console.error("   Fix: Make sure backend is running on " + API_URL);
+        console.error("   Run: python backend/gateway.py");
+        return false;
       }
     }
 
-    function getRandomByType(type) {
-      const candidates = TEST_TEMPLATES.filter(item => item.type === type);
-      return candidates[Math.floor(Math.random() * candidates.length)];
-    }
-
-    function shuffleArray(array) {
-      for (let i = array.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [array[i], array[j]] = [array[j], array[i]];
+    async function initDashboard() {
+      console.log("[INIT] Initializing dashboard");
+      
+      // Run diagnostic check first
+      console.log("[INIT] Running diagnostic check...");
+      const backendOk = await diagnosticCheck();
+      if (!backendOk) {
+        console.error("[INIT] ❌ CRITICAL: Backend is unreachable. Check console above.");
+      } else {
+        console.log("[INIT] ✅ Backend is reachable.");
       }
-      return array;
-    }
-
-    function buildRequestBatch() {
-      const batch = [];
-      // Send a large batch every interval to quickly trigger rate limit
-      // 1 allowed
-      batch.push({ ...getRandomByType('allowed') });
-      // 1-2 alerts
-      batch.push({ ...getRandomByType('alert') });
-      batch.push({ ...getRandomByType('alert') });
-      // 1 block
-      batch.push({ ...getRandomByType('block') });
-      // 20 random mix to ensure rate-limit triggers
-      for (let i = 0; i < 20; i++) {
-        batch.push({ ...TEST_TEMPLATES[Math.floor(Math.random() * TEST_TEMPLATES.length)] });
-      }
-      return shuffleArray(batch);
-    }
-
-    async function startTestRequests() {
-      if (isSendingTestRequests) return;
-      isSendingTestRequests = true;
-      requestBatchId += 1;
-      const currentBatch = requestBatchId;
-
-      const sendButton = document.getElementById('send-test-request');
-      const stopButton = document.getElementById('stop-test-request');
-      if (sendButton) sendButton.disabled = true;
-      if (stopButton) stopButton.disabled = false;
-      updateTestStatus('Sending burst requests… (expect rate-limit 429s after ~25 requests)', 'var(--accent-yellow)');
-
-      async function sendBurst() {
-        if (!isSendingTestRequests || currentBatch !== requestBatchId) return;
-        const batch = buildRequestBatch();
-        console.log(`Sending batch of ${batch.length} requests`);
-        await Promise.all(batch.map(sendSingleTestRequest));
-        // Fetch updates after each burst
-        await fetchDashboard();
-        await fetchAlerts();
-        await fetchWAFAlerts();
-      }
-
-      await sendBurst();
-      testRequestInterval = setInterval(sendBurst, 300);  // Send burst every 300ms
-    }
-
-    function stopTestRequests() {
-      if (!isSendingTestRequests) return;
-      isSendingTestRequests = false;
-      requestBatchId += 1;
-      if (testRequestInterval) {
-        clearInterval(testRequestInterval);
-        testRequestInterval = null;
-      }
-      const sendButton = document.getElementById('send-test-request');
-      const stopButton = document.getElementById('stop-test-request');
-      if (sendButton) sendButton.disabled = false;
-      if (stopButton) stopButton.disabled = true;
-      updateTestStatus('Stopped sending requests.', 'var(--accent-green)');
-    }
-
-    function initDashboard() {
+      
       bindTestButtons();
-      fetchDashboard();
-      fetchAlerts();
-      fetchWAFAlerts();
-      setInterval(fetchDashboard, 3000);
-      setInterval(fetchAlerts, 5000);
-      setInterval(fetchWAFAlerts, 5000);
+      updateAuthUI();
+      const hasSession = await restoreSession();
+      if (hasSession) {
+        await Promise.all([fetchDashboard(), fetchAlerts(), fetchWAFAlerts()]);
+        startPolling();
+      }
     }
 
     if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', initDashboard);
+      console.log("[BOOT] Waiting for DOM to load");
+      document.addEventListener('DOMContentLoaded', () => {
+        console.log("[BOOT] DOM loaded, calling initDashboard()");
+        initDashboard();
+      });
     } else {
+      console.log("[BOOT] DOM already loaded, calling initDashboard()");
       initDashboard();
     }
   </script>

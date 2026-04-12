@@ -1,6 +1,7 @@
 import json
 import re
 from dataclasses import dataclass
+from urllib.parse import unquote_plus
 from fastapi import Request
 
 from core.config import ALERT_SCORE, BLOCK_SCORE, MALICIOUS_BODY_PATTERNS, MALICIOUS_HEADER_PATTERNS
@@ -44,7 +45,7 @@ def inspect_json(obj: object, score: int = 0) -> int:
 
 def body_score(body: bytes) -> int:
     score = 0
-    text = body.decode("utf-8", errors="ignore")
+    text = unquote_plus(body.decode("utf-8", errors="ignore"))
 
     if re.search(r"union\s+select", text, re.IGNORECASE):
         score += 100

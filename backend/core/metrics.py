@@ -148,7 +148,7 @@ def get_waf_alerts_payload(abuse_data: dict) -> dict:
     }
 
 
-def get_metrics_payload(abuse_data: dict) -> dict:
+def get_metrics_payload(abuse_data: dict, rate_limit: int = 100) -> dict:
     blocked_by_reason: dict[str, int] = {}
     for log in logs:
         if log.get("status", 0) >= 400:
@@ -156,14 +156,33 @@ def get_metrics_payload(abuse_data: dict) -> dict:
             blocked_by_reason[reason] = blocked_by_reason.get(reason, 0) + 1
 
     avg_response_time = round(get_average_response_time(), 2)
+    top_abusive_ips = sorted(
+        [
+            {"ip": ip, "block_count": len(timestamps)}
+            for ip, timestamps in abuse_data.items()
+        ],
+        key=lambda item: item["block_count"],
+        reverse=True,
+    )[:5]
+
+    recent_waf_blocks = [
+        log for log in list(logs)
+        if log.get("status", 0) >= 400 and log.get("reason", "").lower().startswith("waf")
+    ]
+
     return {
         "total_requests": metrics["total_requests"],
         "total_blocked": metrics["total_blocked"],
         "allowed_requests": metrics["allowed_requests"],
         "avg_response_time_ms": avg_response_time,
+        "requests_this_minute": len(
+            [log for log in logs if datetime.fromisoformat(log["time"]) > datetime.now() - timedelta(minutes=1)]
+        ),
+        "rate_limit": rate_limit,
+        "logs": list(logs)[-50:],
+        "top_abusive_ips": top_abusive_ips,
+        "recent_waf_blocks": recent_waf_blocks[-10:],
         "tiers": request_counters,
         "abuse_ip_count": len(abuse_data),
-        "blocked_ips": {ip: len(ts) for ip, ts in abuse_data.items()},
         "blocked_by_reason": blocked_by_reason,
-        "logs": list(logs)[-50:],
     }

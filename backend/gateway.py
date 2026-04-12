@@ -1,34 +1,61 @@
 ﻿import json
 import time
 from collections import deque
+from datetime import datetime
 from typing import Any, Dict, Optional
 
 from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from auth import LoginRequest, authenticate_jwt, create_access_token, validate_api_key
+from core.decision import evaluate_request
+from core.metrics import (
+    append_log,
+    append_waf_block,
+    get_alerts_payload,
+    get_metrics_payload,
+    get_waf_alerts_payload,
+    record_allowed_request,
+    record_blocked_request,
+)
 from metrics import (
-    get_metrics,
     record_alert,
     record_attack_types,
     record_block,
     record_block_reason,
     record_ip_request,
-    record_request,
-    record_user_request,
 )
-from security.engine import evaluate_request
-
-PUBLIC_PATHS = {'/login', '/docs', '/openapi.json'}
+from security.abuse import abuse as abuse_data
+from ml.attack_detector import detector as ml_detector
 
 app = FastAPI(title='Secure API Gateway')
 
+# Custom exception handler for HTTPException to properly serialize dict details to JSON
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request: Request, exc: HTTPException):
+    if isinstance(exc.detail, dict):
+        return JSONResponse(
+            status_code=exc.status_code,
+            content=exc.detail,
+            headers=exc.headers or {}
+        )
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={'detail': exc.detail},
+        headers=exc.headers or {}
+    )
 
-@app.middleware('http')
-async def public_route_middleware(request: Request, call_next):
-    if request.url.path in PUBLIC_PATHS:
-        return await call_next(request)
-    return await call_next(request)
+# Initialize ML detector on startup
+print(f"[STARTUP] ML detector initialized. Model loaded: {ml_detector.loaded}")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=['*'],
+    allow_credentials=True,
+    allow_methods=['*'],
+    allow_headers=['*'],
+)
 
 RATE_LIMIT_WINDOW = 60
 RATE_LIMIT_MAX_REQUESTS = 100
@@ -110,15 +137,27 @@ def _validate_input_size(request: Request, body: bytes) -> None:
         record_block()
         raise HTTPException(
             status_code=413,
-            detail={'status': 'blocked', 'score': 0, 'reasons': ['input_size']},
+            detail={'status': 'blocked', 'score': 0, 'reason': 'input_size', 'reasons': ['input_size']},
         )
     if len(request.url.path) > MAX_PATH_LENGTH or len(request.url.query) > MAX_QUERY_LENGTH:
         record_block_reason('input_size')
         record_block()
         raise HTTPException(
             status_code=413,
-            detail={'status': 'blocked', 'score': 0, 'reasons': ['input_size']},
+            detail={'status': 'blocked', 'score': 0, 'reason': 'input_size', 'reasons': ['input_size']},
         )
+
+
+def _extract_reason(detail: Any) -> str:
+    if isinstance(detail, dict):
+        if isinstance(detail.get('reason'), str):
+            return detail['reason']
+        if isinstance(detail.get('reasons'), list) and detail['reasons']:
+            return ', '.join(str(r) for r in detail['reasons'])
+        if 'detail' in detail:
+            return str(detail['detail'])
+        return ''
+    return str(detail or '')
 
 
 def _raise_block(reason: str, status_code: int = 403) -> None:
@@ -126,7 +165,8 @@ def _raise_block(reason: str, status_code: int = 403) -> None:
     record_block()
     raise HTTPException(
         status_code=status_code,
-        detail={'status': 'blocked', 'score': 0, 'reasons': [reason]},
+        detail={'status': 'blocked', 'score': 0, 'reason': reason, 'reasons': [reason]},
+        headers={'X-WAF-Status': 'block', 'X-WAF-Reason': reason},
     )
 
 
@@ -144,7 +184,7 @@ def _enforce_rate_limit(request: Request, user_id: Optional[int]) -> None:
         record_block()
         raise HTTPException(
             status_code=429,
-            detail={'status': 'blocked', 'score': 0, 'reasons': ['rate_limit']},
+            detail={'status': 'blocked', 'score': 0, 'reason': 'rate_limit', 'reasons': ['rate_limit']},
         )
 
     if user_id is not None:
@@ -157,18 +197,25 @@ def _enforce_rate_limit(request: Request, user_id: Optional[int]) -> None:
             record_block()
             raise HTTPException(
                 status_code=429,
-                detail={'status': 'blocked', 'score': 0, 'reasons': ['rate_limit']},
+                detail={'status': 'blocked', 'score': 0, 'reason': 'rate_limit', 'reasons': ['rate_limit']},
             )
 
 
-@app.post('/login')
-async def login(request: LoginRequest):
-    if request.username == 'admin' and request.password == 'admin':
-        token = create_access_token({'user_id': 1, 'role': 'admin'})
-        return {'access_token': token, 'token_type': 'bearer'}
+def _get_request_payload(body: bytes) -> Any:
+    parsed = _parse_json(body)
+    if parsed is not None:
+        return parsed
+    try:
+        return body.decode('utf-8', errors='ignore')
+    except Exception:
+        return str(body)
 
-    if request.username == 'user' and request.password == 'user':
-        token = create_access_token({'user_id': 2, 'role': 'user'})
+
+@app.post('/login')
+async def login(request: LoginRequest, x_api_key: str = Depends(validate_api_key)):
+    if request.username == "Errorcode" and request.password == "intrusionx":
+        token = create_access_token({'user_id': 1, 'role': 'admin'})
+        print("LOGIN SUCCESS:", request.username)
         return {'access_token': token, 'token_type': 'bearer'}
 
     raise HTTPException(status_code=401, detail='Invalid credentials')
@@ -176,57 +223,192 @@ async def login(request: LoginRequest):
 
 @app.get('/metrics')
 async def metrics(x_api_key: str = Depends(validate_api_key), token_payload: dict = Depends(authenticate_jwt)):
-    return get_metrics()
+    return get_metrics_payload(abuse_data, rate_limit=RATE_LIMIT_MAX_REQUESTS)
+
+
+@app.get('/alerts')
+async def alerts(x_api_key: str = Depends(validate_api_key), token_payload: dict = Depends(authenticate_jwt)):
+    return get_alerts_payload(abuse_data)
+
+
+@app.get('/waf-alerts')
+async def waf_alerts(x_api_key: str = Depends(validate_api_key), token_payload: dict = Depends(authenticate_jwt)):
+    return get_waf_alerts_payload(abuse_data)
+
+
+@app.post('/clear-ip')
+async def clear_ip_endpoint(request: Request, x_api_key: str = Depends(validate_api_key), token_payload: dict = Depends(authenticate_jwt)):
+    """Clear blocked IP addresses for testing.
+    
+    Query parameters:
+    - ip: Specific IP to clear (optional). If empty, clears all blocked IPs.
+    """
+    # Import here to avoid circular imports
+    from core.state import clear_ip, clear_all_blocked_ips
+    
+    ip = request.query_params.get('ip', '').strip()
+    
+    if ip:
+        cleared = clear_ip(ip)
+        record_block_reason('ip_blacklist_cleared')
+        return {
+            'status': 'success',
+            'action': 'clear_ip',
+            'ip': ip,
+            'was_blocked': cleared,
+            'message': f'IP {ip} cleared' if cleared else f'IP {ip} was not blocked'
+        }
+    else:
+        cleared_count = clear_all_blocked_ips()
+        record_block_reason('ip_blacklist_all_cleared')
+        return {
+            'status': 'success',
+            'action': 'clear_all',
+            'cleared_count': cleared_count,
+            'message': f'Cleared {cleared_count} blocked IPs'
+        }
 
 
 @app.api_route('/{path:path}', methods=['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'])
 async def gateway(path: str, request: Request, api_key: Any = Depends(validate_api_key), token_payload: dict = Depends(authenticate_jwt)):
-    body = await request.body()
-    user_id = token_payload.get('user_id')
-    role = token_payload.get('role')
-    record_request()
-    record_user_request(user_id)
+    print(f"DEBUG gateway path={path} method={request.method} token_payload={token_payload} headers={dict(request.headers)}")
+    start_time = time.time()
+    client_ip = _get_client_ip(request)
+    result: Optional[dict] = None
+    status_code = 200
+    reason = 'ok'
 
-    _validate_input_size(request, body)
+    try:
+        body = await request.body()
+        print(f"DEBUG gateway body={body!r}")
+        user_id = token_payload.get('user_id')
+        role = token_payload.get('role')
+        print(f"DEBUG gateway user_id={user_id} role={role}")
 
-    requested_id = _extract_user_id_from_query(request)
-    path_target_id = _get_path_target_id(path)
+        _validate_input_size(request, body)
+        print("DEBUG gateway input size validated")
 
-    if path.startswith('users') and requested_id and str(user_id) != requested_id:
-        _raise_block('bola')
+        requested_id = _extract_user_id_from_query(request)
+        path_target_id = _get_path_target_id(path)
+        print(f"DEBUG gateway requested_id={requested_id} path_target_id={path_target_id}")
 
-    if path.startswith('users') and path_target_id and str(user_id) != path_target_id:
-        _raise_block('bola')
+        if path.startswith('users') and requested_id and str(user_id) != requested_id:
+            _raise_block('rbac')
 
-    if _is_admin_route(request.url.path) and role != 'admin':
-        _raise_block('rbac')
+        if path.startswith('users') and path_target_id and str(user_id) != path_target_id:
+            _raise_block('rbac')
 
-    if _is_json_request(request) and not _validate_json_body(body):
-        _raise_block('invalid_json')
+        if _is_admin_route(request.url.path) and role != 'admin':
+            _raise_block('rbac')
 
-    if _has_mass_assignment(request, body):
-        _raise_block('mass_assignment')
+        if _is_json_request(request) and not _validate_json_body(body):
+            _raise_block('invalid_json')
 
-    result = evaluate_request(request, body, token_payload)
+        if _has_mass_assignment(request, body):
+            _raise_block('mass_assignment')
 
-    if result['status'] == 'block':
-        record_block_reason('attack')
-        record_attack_types(result['reasons'])
-        raise HTTPException(status_code=403, detail={'status': 'blocked', 'score': result['score'], 'reasons': result['reasons']})
+        result = await evaluate_request(request, body, client_ip)
+        status = result.get('status', 'allow')
+        reason = result.get('reason') or (result.get('reasons', ['ok'])[0] if result.get('reasons') else 'ok')
 
-    if result['status'] == 'alert':
-        record_alert()
-        record_attack_types(result['reasons'])
+        if status == 'block':
+            record_block_reason(reason)
+            record_block()
+            record_attack_types(result.get('reasons', []))
+            return JSONResponse(
+                status_code=403,
+                content={
+                    'status': 'blocked',
+                    'score': result.get('score', 0),
+                    'reason': reason,
+                    'reasons': result.get('reasons', []),
+                    'ip_score': result.get('ip_score', 0),  # NEW: Threat score
+                    'threat_level': result.get('threat_level', 'high'),  # NEW: Threat level
+                },
+                headers={'X-WAF-Status': 'block', 'X-WAF-Reason': reason},
+            )
 
-    _enforce_rate_limit(request, user_id)
+        if status == 'alert':
+            record_alert()
+            record_attack_types(result.get('reasons', []))
 
-    return JSONResponse(
-        status_code=200,
-        content={
-            'status': result['status'],
-            'score': result['score'],
-            'reasons': result['reasons'],
+        _enforce_rate_limit(request, user_id)
+
+        response_content = {
+            'status': status,
+            'score': result.get('score', 0),
+            'reason': reason,
+            'reasons': result.get('reasons', []),
             'path': path,
-            'message': 'Request processed',
-        },
-    )
+            'ip_score': result.get('ip_score', 0),  # NEW: Threat score
+            'threat_level': result.get('threat_level', 'low'),  # NEW: Threat level
+        }
+
+        if path == 'test-waf':
+            response_content['request'] = _get_request_payload(body)
+            response_content['message'] = 'WAF test request processed'
+        elif path == 'users' and request.method == 'GET':
+            response_content['users'] = [
+                {'user_id': 1, 'name': 'John Doe', 'email': 'john@example.com'},
+                {'user_id': 2, 'name': 'Jane Doe', 'email': 'jane@example.com'},
+            ]
+        elif path.startswith('users/') and request.method == 'GET':
+            if path_target_id.isdigit():
+                response_content['user'] = {'user_id': int(path_target_id), 'name': f'User {path_target_id}', 'email': f'user{path_target_id}@example.com'}
+            else:
+                raise HTTPException(status_code=404, detail='User not found')
+        elif path == 'orders' and request.method == 'GET':
+            response_content['orders'] = [
+                {'id': 1, 'item': 'Laptop', 'price': 999},
+                {'id': 2, 'item': 'Smartphone', 'price': 699},
+            ]
+        elif path == 'admin' and request.method == 'GET':
+            response_content['admin'] = {
+                'user': 'admin' if role == 'admin' else 'user',
+                'role': role,
+                'message': 'Admin access granted',
+            }
+        elif path == 'health':
+            response_content['message'] = 'gateway healthy'
+        else:
+            response_content['message'] = 'Request processed through the gateway'
+
+        response = JSONResponse(status_code=200, content=response_content)
+        response.headers['X-WAF-Status'] = status
+        response.headers['X-WAF-Reason'] = reason
+        return response
+    except HTTPException as exc:
+        status_code = exc.status_code
+        reason = _extract_reason(exc.detail)
+        raise HTTPException(
+            status_code=exc.status_code,
+            detail=exc.detail,
+            headers={'X-WAF-Status': 'block', 'X-WAF-Reason': reason},
+        )
+    finally:
+        elapsed_ms = int((time.time() - start_time) * 1000)
+        log_entry = {
+            'time': datetime.utcnow().isoformat(),
+            'ip': client_ip,
+            'endpoint': request.url.path,
+            'method': request.method,
+            'status': status_code,
+            'reason': reason,
+            'response_time_ms': elapsed_ms,
+        }
+        if status_code >= 400:
+            # All 403 responses are WAF blocks by design (security checks in evaluate_request)
+            # All other 4xx errors are validation/business logic blocks
+            if status_code == 403:
+                append_waf_block(log_entry)
+            else:
+                append_log(log_entry)
+            record_blocked_request(elapsed_ms, is_waf=(status_code == 403))
+        else:
+            append_log(log_entry)
+            record_allowed_request(elapsed_ms, alert=(result is not None and result.get('status') == 'alert'))
+
+
+if __name__ == '__main__':
+    import uvicorn
+    uvicorn.run(app, host='127.0.0.1', port=8000)

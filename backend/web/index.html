@@ -1,0 +1,1303 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>GateLens – Secure API Gateway</title>
+
+  <style>
+    :root {
+      --bg: #0a0e17;
+      --bg-soft: #131a28;
+      --bg-panel: #1a2130;
+      --text: #e0e6ed;
+      --text-muted: #94a3b8;
+      --border: #2d3748;
+      --accent-green: #0f9d58;
+      --accent-red: #e53935;
+      --accent-yellow: #fdd835;
+      --accent-blue: #3498db;
+      --shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    }
+
+    * {
+      margin: 0; padding: 0; box-sizing: border-box;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    }
+
+    body {
+      background-color: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+    }
+
+    h1, h2, h3 { margin-bottom: 0.5em; font-weight: 600; }
+
+    button {
+      padding: 0.5em 1em;
+      border: none;
+      border-radius: 4px;
+      background-color: var(--accent-blue);
+      color: white;
+      cursor: pointer;
+      font-size: 0.9em;
+      transition: 0.2s;
+    }
+
+    button:hover {
+      background-color: #2980b9;
+    }
+
+    button.primary {
+      background-color: var(--accent-green);
+      font-weight: 600;
+      padding: 0.6em 1.2em;
+    }
+
+    button.primary:hover {
+      background-color: #0d8647;
+    }
+
+    button:active {
+      transform: scale(0.98);
+    }
+
+    button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .navbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0.8em 1.5em;
+      background-color: var(--bg-soft);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .navbar-title {
+      font-size: 1.4em; font-weight: 700; color: white;
+    }
+
+    .status-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background-color: var(--accent-green);
+      display: inline-block;
+      margin-right: 0.4em;
+    }
+
+    .container {
+      display: grid;
+      grid-gap: 1.2em;
+      padding: 1.2em;
+      max-width: 1400px;
+      margin: 0 auto;
+      grid-template-columns: 1fr;
+      grid-template-areas:
+        "auth-panel"
+        "rate-panel"
+        "traffic-panel"
+        "metrics-panel"
+        "logs-panel"
+        "alerts-panel"
+        "waf-alerts-panel"
+        "controls-panel";
+    }
+
+    @media (min-width: 1024px) {
+      .container {
+        grid-template-columns: 1fr 1.2fr;
+        grid-template-areas:
+          "auth-panel traffic-panel"
+          "rate-panel traffic-panel"
+          "metrics-panel logs-panel"
+          "alerts-panel alerts-panel"
+          "waf-alerts-panel waf-alerts-panel"
+          "controls-panel controls-panel";
+      }
+    }
+
+    .panel {
+      background-color: var(--bg-panel);
+      border-radius: 8px;
+      padding: 1.2em;
+      border: 1px solid var(--border);
+      box-shadow: var(--shadow);
+    }
+
+    .panel-title {
+      font-size: 1.1em; margin-bottom: 0.8em;
+      color: white;
+    }
+
+    /* Auth Panel */
+    #auth-panel .auth-row {
+      margin-bottom: 0.6em; font-size: 0.9em;
+    }
+
+    .auth-label {
+      min-width: 120px;
+      color: var(--text-muted);
+      display: inline-block;
+    }
+
+    .status-tag {
+      padding: 0.15em 0.5em;
+      border-radius: 4px;
+      font-size: 0.8em;
+      font-weight: 600;
+    }
+
+    .status-valid {
+      background-color: rgba(15, 157, 88, 0.2);
+      color: var(--accent-green);
+    }
+
+    .status-invalid {
+      background-color: rgba(229, 57, 53, 0.2);
+      color: var(--accent-red);
+    }
+
+    /* Rate Limiting */
+    .rate-bar {
+      width: 100%; height: 8px;
+      background-color: var(--bg);
+      border-radius: 4px;
+      overflow: hidden;
+      margin-top: 0.3em;
+    }
+
+    .rate-fill {
+      height: 100%;
+      background-color: var(--accent-blue);
+      width: 0%;
+      transition: width 0.3s ease;
+    }
+
+    /* Traffic Table */
+    .traffic-table {
+      width: 100%; border-collapse: collapse;
+      font-size: 0.85em;
+      margin-top: 0.5em;
+    }
+
+    .traffic-table th {
+      text-align: left;
+      padding: 0.6em 0.5em;
+      color: var(--text-muted);
+      border-bottom: 1px solid var(--border);
+      font-weight: 600;
+    }
+
+    .traffic-table td {
+      padding: 0.6em 0.5em;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .traffic-table-container {
+      max-height: 320px;
+      overflow-y: auto;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+    }
+
+    .status-cell {
+      display: flex;
+      align-items: center;
+    }
+
+    .status-dot-small {
+      width: 6px; height: 6px; border-radius: 50%;
+      background-color: var(--accent-green);
+    }
+
+    .status-blocked .status-dot-small {
+      background-color: var(--accent-red);
+    }
+
+    .status-rate-limited .status-dot-small {
+      background-color: var(--accent-yellow);
+    }
+
+    .status-alert .status-dot-small {
+      background-color: #f6a800;
+    }
+
+    .status-blocked .status-text {
+      color: var(--accent-red);
+    }
+
+    .status-allowed .status-text {
+      color: var(--accent-green);
+    }
+
+    .status-alert .status-text {
+      color: #f6a800;
+    }
+
+    .status-rate-limited .status-text {
+      color: var(--accent-yellow);
+    }
+
+    /* Logs Panel */
+    .logs-list {
+      max-height: 300px;
+      overflow-y: auto;
+      font-size: 0.85em;
+      border-radius: 4px;
+      border: 1px solid var(--border);
+      padding: 0.5em;
+      margin-top: 0.5em;
+    }
+
+    .log-line {
+      margin-bottom: 0.3em;
+      padding: 0.2em 0;
+      border-bottom: 1px solid rgba(45, 55, 72, 0.4);
+    }
+
+    .log-line:last-child {
+      border-bottom: none;
+    }
+
+    /* Metrics Panel */
+    .metrics-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.8em;
+      margin-top: 0.8em;
+    }
+
+    .metric-card {
+      background-color: var(--bg);
+      padding: 0.8em;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      text-align: center;
+    }
+
+    .metric-value {
+      font-size: 1.6em;
+      font-weight: 700;
+      color: var(--accent-blue);
+    }
+
+    .metric-label {
+      font-size: 0.85em;
+      color: var(--text-muted);
+    }
+
+    /* Alerts Panel */
+    .alert-section {
+      margin-bottom: 0.5em;
+    }
+
+    .alert-item {
+      background-color: var(--bg);
+      padding: 0.5em;
+      margin-bottom: 0.3em;
+      border-radius: 4px;
+      border-left: 3px solid var(--accent-red);
+      font-size: 0.8em;
+    }
+
+    .alert-ip {
+      color: var(--accent-red);
+      font-weight: 600;
+      margin-bottom: 0.2em;
+    }
+
+    .alert-meta {
+      color: var(--text-muted);
+      font-size: 0.75em;
+    }
+
+    .waf-block-item {
+      background-color: rgba(229, 57, 53, 0.1);
+      padding: 0.4em;
+      margin-bottom: 0.3em;
+      border-radius: 3px;
+      border-left: 2px solid var(--accent-red);
+      font-size: 0.75em;
+      line-height: 1.4;
+    }
+
+    #alerts-panel {
+      grid-area: alerts-panel;
+    }
+
+    #controls-panel {
+      grid-area: controls-panel;
+    }
+
+    /* WAF Alerts Panel */
+    .waf-alerts-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.8em;
+      margin-bottom: 1em;
+    }
+
+    .waf-alerts-table th {
+      text-align: left;
+      padding: 0.5em;
+      color: var(--text-muted);
+      border-bottom: 1px solid var(--border);
+      font-weight: 600;
+      background-color: rgba(15, 157, 88, 0.1);
+    }
+
+    .waf-alerts-table td {
+      padding: 0.5em;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .waf-alerts-table tr:hover {
+      background-color: rgba(229, 57, 53, 0.05);
+    }
+
+    .waf-reason {
+      color: var(--accent-red);
+      font-weight: 500;
+    }
+
+    .abuse-ip-row {
+      background-color: rgba(229, 57, 53, 0.1);
+      padding: 0.6em;
+      margin-bottom: 0.4em;
+      border-radius: 4px;
+      border-left: 3px solid var(--accent-red);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .abuse-ip-addr {
+      color: var(--accent-red);
+      font-weight: 600;
+      font-family: 'Courier New', monospace;
+    }
+
+    .abuse-block-count {
+      color: var(--accent-yellow);
+      font-weight: 600;
+      background-color: rgba(253, 216, 53, 0.2);
+      padding: 0.2em 0.4em;
+      border-radius: 3px;
+      font-size: 0.85em;
+    }
+
+    #waf-alerts-panel {
+      grid-area: waf-alerts-panel;
+    }
+  </style>
+</head>
+
+<body>
+  <nav class="navbar">
+    <div class="navbar-title">GateLens – Secure API Gateway</div>
+    <div>
+      <span class="status-dot"></span>
+      <span>Active / Secure</span>
+    </div>
+  </nav>
+
+  <div class="container">
+
+    <!-- Auth Status -->
+    <div class="panel" id="auth-panel">
+      <div class="panel-title">Authentication Status</div>
+      <div class="auth-row">
+        <span class="auth-label">User</span>
+        <span class="auth-value">admin</span>
+      </div>
+      <div class="auth-row">
+        <span class="auth-label">Token</span>
+        <span class="auth-value">
+          <span class="status-tag status-valid">Valid</span>
+        </span>
+      </div>
+      <div class="auth-row">
+        <span class="auth-label">API Key</span>
+        <span class="auth-value">
+          <span class="status-tag status-valid">Valid</span>
+        </span>
+      </div>
+    </div>
+
+    <!-- Rate Limiting -->
+    <div class="panel" id="rate-panel">
+      <div class="panel-title">Rate Limiting</div>
+      <div class="rate-info">
+        <span>Requests per minute</span>
+        <span id="rate-current">0</span> / <span id="rate-total">10</span>
+      </div>
+      <div class="rate-bar">
+        <div class="rate-fill" id="rate-fill"></div>
+      </div>
+    </div>
+
+    <!-- Traffic Monitoring -->
+    <div class="panel" id="traffic-panel">
+      <div class="panel-title">API Traffic Monitoring</div>
+      <div class="traffic-table-container">
+        <table class="traffic-table" id="traffic-table">
+          <thead>
+            <tr>
+              <th>Timestamp</th>
+              <th>IP</th>
+              <th>Endpoint</th>
+              <th>Method</th>
+              <th>Status</th>
+              <th>Reason</th>
+            </tr>
+          </thead>
+          <tbody id="traffic-body">
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Logs -->
+    <div class="panel" id="logs-panel">
+      <div class="panel-title">Request Logs</div>
+      <div class="logs-list" id="logs-list">
+      </div>
+    </div>
+
+    <!-- Metrics -->
+    <div class="panel" id="metrics-panel">
+      <div class="panel-title">Performance</div>
+      <div class="metrics-grid">
+        <div class="metric-card">
+          <div class="metric-value" id="metric-total-requests">0</div>
+          <div class="metric-label">Total Requests</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-value" id="metric-total-blocked">0</div>
+          <div class="metric-label">Total Blocked</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-value" id="metric-response-time">0 ms</div>
+          <div class="metric-label">Avg Response Time</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-value" id="metric-realtime-requests">0</div>
+          <div class="metric-label">Requests / min</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Alerts Panel -->
+    <div class="panel" id="alerts-panel">
+      <div class="panel-title">Security Alerts</div>
+      
+      <div class="alert-section">
+        <h3 style="font-size: 0.95em; color: var(--text-muted); margin-bottom: 0.6em;">Top Abusive IPs</h3>
+        <div id="abusive-ips-list">
+          <span style="color: var(--text-muted); font-size: 0.85em;">No threats detected</span>
+        </div>
+      </div>
+
+      <div class="alert-section" style="margin-top: 1em; padding-top: 1em; border-top: 1px solid var(--border);">
+        <h3 style="font-size: 0.95em; color: var(--text-muted); margin-bottom: 0.6em;">Recent WAF Blocks</h3>
+        <div id="waf-blocks-list" style="font-size: 0.8em;">
+          <span style="color: var(--text-muted);">None</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- WAF Alerts Panel -->
+    <div class="panel" id="waf-alerts-panel">
+      <div class="panel-title">WAF Alerts & Abuse Detection</div>
+      
+      <div style="margin-bottom: 1.2em;">
+        <h3 style="font-size: 0.95em; color: var(--text-muted); margin-bottom: 0.6em;">Recent WAF Blocks</h3>
+        <table class="waf-alerts-table">
+          <thead>
+            <tr>
+              <th>Time</th>
+              <th>IP</th>
+              <th>Endpoint</th>
+              <th>Reason</th>
+            </tr>
+          </thead>
+          <tbody id="waf-blocks-tbody">
+            <tr>
+              <td colspan="4" style="text-align: center; color: var(--text-muted);">No blocks detected</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div>
+        <h3 style="font-size: 0.95em; color: var(--text-muted); margin-bottom: 0.6em;">Top Abusive IPs (5 min)</h3>
+        <div id="abuse-ips-container">
+          <div style="color: var(--text-muted); font-size: 0.85em;">No abusive activity detected</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Control Panel -->
+    <div class="panel" id="controls-panel">
+      <div class="panel-title">Test Controls</div>
+      <div class="control-buttons" style="display:flex; gap:0.8em; flex-wrap:wrap; align-items:center;">
+        <button class="primary" id="normal-request">Normal Request</button>
+        <button class="primary" id="sql-request">SQL Injection Test</button>
+        <button class="primary" id="xss-request">XSS Test</button>
+        <button class="primary" id="send-test-request">Send Burst Test</button>
+        <button class="primary" id="stop-test-request" disabled>Stop Burst</button>
+        <button id="clear-ip-button" style="background-color: #ff9800; padding: 0.6em 1.2em; font-weight: 600;">Clear Blocked IP</button>
+      </div>
+      <div id="test-status" style="font-size: 0.85em; margin-top: 0.8em; color: var(--text-muted);"></div>
+      <div id="test-response" style="margin-top: 1em; padding: 0.8em; background-color: #111827; border-radius: 8px; border: 1px solid var(--border); color: var(--text-muted); font-size: 0.9em; white-space: pre-wrap;"></div>
+    </div>
+
+  </div>
+
+  <script>
+    // ============================================
+    // GateLens – API Gateway Dashboard
+    // Real-time data integration from FastAPI backend
+    // ============================================
+
+    // API Configuration
+    const API_URL = 'http://127.0.0.1:8000';
+    let TEST_TOKEN = null;  // Will be fetched via login
+    let TEST_TEMPLATES = [];  // For burst testing
+    let requestBatchId = 0;  // Track batch ID for cancellation
+
+    /**
+     * Determines the status CSS class and display text with detailed messaging
+     * Parses X-WAF-Status and X-WAF-Reason headers for precise blocking reason
+     */
+    function getStatusClass(statusCode, reason, wafStatus, wafReason) {
+      // IP temporarily blocked (10s in DEMO_MODE)
+      if (wafStatus === 'block' && wafReason === 'ip_blacklist') {
+        return {
+          statusClass: 'status-blocked',
+          statusText: 'Blocked (IP temporarily blocked - 10s)',
+          color: 'var(--accent-red)'
+        };
+      }
+      
+      // WAF attack patterns detected
+      if (wafStatus === 'block') {
+        const detailMap = {
+          'sql_injection': 'SQL injection detected',
+          'xss': 'XSS attack detected',
+          'waf_headers': 'Malicious headers detected',
+          'waf_body': 'Malicious payload detected',
+          'rbac': 'Authorization denied',
+          'mass_assignment': 'Invalid field access',
+          'invalid_json': 'Invalid JSON format',
+          'input_size': 'Payload too large'
+        };
+        const detail = detailMap[wafReason] || (wafReason ? wafReason.replace(/_/g, ' ') : 'WAF block');
+        return {
+          statusClass: 'status-blocked',
+          statusText: `Blocked (${detail})`,
+          color: 'var(--accent-red)'
+        };
+      }
+      
+      // Rate limited
+      if (statusCode === 429) {
+        return {
+          statusClass: 'status-rate-limited',
+          statusText: 'Rate Limited (100+ req/min)',
+          color: 'var(--accent-yellow)'
+        };
+      }
+      
+      // Generic 4xx/5xx error
+      if (statusCode >= 400) {
+        const reasonText = reason ? reason.replace(/_/g, ' ') : 'request blocked';
+        return {
+          statusClass: 'status-blocked',
+          statusText: `Blocked (${reasonText})`,
+          color: 'var(--accent-red)'
+        };
+      }
+      
+      // Alert (score-based detection)
+      if (reason && (reason.toLowerCase().includes('alert') || reason.toLowerCase().includes('score'))) {
+        return {
+          statusClass: 'status-alert',
+          statusText: 'Alert (suspicious activity)',
+          color: '#f6a800'
+        };
+      }
+      
+      // Allowed
+      return {
+        statusClass: 'status-allowed',
+        statusText: 'Allowed',
+        color: 'var(--accent-green)'
+      };
+    }
+
+    /**
+     * Formats a timestamp for display
+     * @param {string} timestamp - ISO or other timestamp format
+     * @returns {string} - Formatted time string (HH:MM:SS)
+     */
+    function formatTime(timestamp) {
+      try {
+        const date = new Date(timestamp);
+        return date.toLocaleTimeString();
+      } catch {
+        return timestamp;
+      }
+    }
+
+    /**
+     * Safely parse response body as JSON, fallback to text or empty object
+     * @param {Response} response - fetch Response object
+     * @returns {Promise<any>} - Parsed object or text
+     */
+    async function safeParseResponse(response) {
+      try {
+        const text = await response.text();
+        if (!text) return {};
+        try {
+          return JSON.parse(text);
+        } catch {
+          return text;
+        }
+      } catch (e) {
+        return {};
+      }
+    }
+
+    /**
+     * Extract WAF headers and status information from response
+     * Standardizes status inference across all frontend components
+     * @param {Response} response - fetch Response object
+     * @param {any} parsedBody - Parsed response body
+     * @returns {object} - { status, wafStatus, wafReason, displayText }
+     */
+    async function extractResponseStatus(response, parsedBody = null) {
+      const wafStatus = response.headers.get('x-waf-status');
+      const wafReason = response.headers.get('x-waf-reason');
+      
+      // Try to extract reason from response body if WAF headers don't provide it
+      let bodyReason = '';
+      if (!wafReason && parsedBody) {
+        if (typeof parsedBody === 'object' && parsedBody.reason) {
+          bodyReason = parsedBody.reason;
+        }
+      }
+      
+      const displayReason = wafReason || bodyReason || '';
+      const statusInfo = getStatusClass(response.status, displayReason, wafStatus, displayReason);
+      
+      return {
+        status: response.status,
+        wafStatus,
+        wafReason: displayReason,
+        displayText: statusInfo.statusText,
+        statusClass: statusInfo.statusClass,
+        color: statusInfo.color
+      };
+    }
+
+    /**
+     * Fetches and displays security alerts
+     */
+    async function fetchAlerts() {
+      try {
+        const response = await fetch(`${API_URL}/alerts`);
+        if (!response.ok) return;
+        
+        const data = await response.json();
+        
+        // Update abusive IPs list in alerts-panel
+        const abusiveIpsList = document.getElementById('abusive-ips-list');
+        if (data.top_abusive_ips && data.top_abusive_ips.length > 0) {
+          abusiveIpsList.innerHTML = data.top_abusive_ips
+            .map(item => `
+              <div class="alert-item">
+                <div class="alert-ip">${item.ip}</div>
+                <div class="alert-meta">Blocks: ${item.block_count}</div>
+              </div>
+            `)
+            .join('');
+        } else {
+          abusiveIpsList.innerHTML = '<span style="color: var(--text-muted); font-size: 0.85em;">No threats detected</span>';
+        }
+        
+        // NOTE: WAF blocks are now rendered by fetchWAFAlerts() in the main WAF Alerts panel
+        // This avoids duplicate/conflicting displays
+      } catch (error) {
+        console.error('Failed to fetch alerts:', error);
+      }
+    }
+
+    async function fetchDashboard() {
+      try {
+        const token = await getGatewayToken();
+        const response = await fetch(`${API_URL}/metrics`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'X-API-Key': TEST_API_KEY,
+          },
+        });
+        if (!response.ok) {
+          throw new Error(`Metrics error: ${response.status}`);
+        }
+
+        const data = await response.json();
+        document.getElementById('metric-total-requests').textContent = data.total_requests || 0;
+        document.getElementById('metric-total-blocked').textContent = data.total_blocked || 0;
+        document.getElementById('metric-response-time').textContent = (data.avg_response_time_ms || 0).toFixed(2) + ' ms';
+        document.getElementById('metric-realtime-requests').textContent = data.total_requests ? Math.min(data.total_requests, 100) : 0;
+
+        const logsList = document.getElementById('logs-list');
+        logsList.innerHTML = '';
+        (data.logs || []).slice(-20).reverse().forEach(log => {
+          const line = document.createElement('div');
+          line.className = 'log-line';
+          line.textContent = `[${formatTime(log.time)}] ${log.method || 'GET'} ${log.endpoint || ''} - ${log.status || 0}${log.reason ? ` (${log.reason})` : ''}`;
+          logsList.appendChild(line);
+        });
+      } catch (error) {
+        console.error('Failed to fetch metrics:', error);
+      }
+    }
+
+    /**
+     * Fetches and displays WAF alerts with standardized status handling
+     * Uses getStatusClass() for consistent status inference across all tabs
+     */
+    async function fetchWAFAlerts() {
+      try {
+        const response = await fetch(`${API_URL}/waf-alerts`);
+        if (!response.ok) {
+          throw new Error(`API error: ${response.status}`);
+        }
+
+        const data = await response.json();
+
+        // Populate WAF blocks table (includes both blocks AND alerts)
+        // Use getStatusClass for consistent status display
+        const wafBlocksBody = document.getElementById('waf-blocks-tbody');
+        if (data.last_waf_blocks && data.last_waf_blocks.length > 0) {
+          wafBlocksBody.innerHTML = data.last_waf_blocks.map(block => {
+            // Use standardized status inference
+            const statusInfo = getStatusClass(block.status, block.reason, 
+              block.status === 403 ? 'block' : null, 
+              block.reason
+            );
+            
+            // Color based on status
+            const isBlock = block.status === 403;
+            const backgroundColor = isBlock ? 'rgba(229, 57, 53, 0.1)' : 'rgba(246, 168, 0, 0.1)';
+            const borderColor = isBlock ? 'var(--accent-red)' : '#f6a800';
+            const badge = isBlock ? '[BLOCK]' : '[ALERT]';
+            
+            return `
+            <tr style="background-color: ${backgroundColor};">
+              <td>${formatTime(block.time)}</td>
+              <td><code style="color: var(--accent-yellow); font-size: 0.8em;">${block.ip}</code></td>
+              <td style="font-size: 0.8em;">${block.endpoint}</td>
+              <td>
+                <span class="waf-reason" style="border-left: 3px solid ${borderColor}; padding-left: 0.4em; display: block;">
+                  <strong>${statusInfo.statusText}</strong> ${badge}
+                </span>
+                <span style="color: var(--text-muted); font-size: 0.75em;">Reason: ${block.reason}</span>
+              </td>
+            </tr>
+          `}).join('');
+        } else {
+          wafBlocksBody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: var(--text-muted);">No blocks or alerts detected</td></tr>`;
+        }
+
+        // Populate abuse IPs list
+        const abuseContainer = document.getElementById('abuse-ips-container');
+        if (data.top_abuse_ips && data.top_abuse_ips.length > 0) {
+          abuseContainer.innerHTML = data.top_abuse_ips.map(item => `
+            <div class="abuse-ip-row">
+              <span class="abuse-ip-addr">${item.ip}</span>
+              <span class="abuse-block-count">${item.block_count} incidents</span>
+            </div>
+          `).join('');
+        } else {
+          abuseContainer.innerHTML = '<div style="color: var(--text-muted); font-size: 0.85em;">No abusive activity detected</div>';
+        }
+
+      } catch (error) {
+        console.error('Failed to fetch WAF alerts:', error);
+      }
+    }
+
+    let testRequestInterval = null;
+    let isSendingTestRequests = false;
+    let isRequestCooldown = false;  // Cooldown flag to prevent rapid clicks
+    const TEST_API_KEY = 'hackathon2026';
+    const REQUEST_COOLDOWN_MS = 2000;  // 2 second cooldown
+
+    function updateTestStatus(message, color = 'var(--text-muted)') {
+      const statusDiv = document.getElementById('test-status');
+      if (statusDiv) {
+        statusDiv.textContent = message;
+        statusDiv.style.color = color;
+      }
+    }
+
+    function updateResponsePanel(text) {
+      const panel = document.getElementById('test-response');
+      if (panel) panel.textContent = text;
+    }
+
+    async function getGatewayToken() {
+      try {
+        const response = await fetch(`${API_URL}/login`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-API-Key': TEST_API_KEY,
+          },
+          body: JSON.stringify({ username: 'Errorcode', password: 'intrusionx' }),
+        });
+        if (!response.ok) {
+          throw new Error(`Login failed ${response.status}`);
+        }
+        const data = await response.json();
+        return data.access_token;
+      } catch (error) {
+        updateTestStatus('Unable to get token', 'var(--accent-red)');
+        throw error;
+      }
+    }
+
+    async function clearBlockedIP() {
+      if (isRequestCooldown) {
+        updateTestStatus('Please wait before sending another request', 'var(--accent-yellow)');
+        return;
+      }
+
+      try {
+        isRequestCooldown = true;
+        updateTestStatus('Clearing blocked IP...', 'var(--accent-yellow)');
+        console.log('[CLEAR-IP] Sending POST /clear-ip request');
+        
+        const token = await getGatewayToken();
+        const response = await fetch(`${API_URL}/clear-ip`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'X-API-Key': TEST_API_KEY,
+          }
+        });
+
+        // Log response details for verification
+        console.log('[CLEAR-IP] Response status:', response.status);
+        console.log('[CLEAR-IP] Response headers:', {
+          'x-waf-status': response.headers.get('x-waf-status'),
+          'x-waf-reason': response.headers.get('x-waf-reason'),
+          'content-type': response.headers.get('content-type')
+        });
+
+        let data = null;
+        try {
+          data = await response.json();
+          console.log('[CLEAR-IP] Response body:', data);
+        } catch (e) {
+          console.log('[CLEAR-IP] Could not parse JSON response:', e.message);
+          throw new Error('Invalid response from server');
+        }
+
+        if (response.ok && data) {
+          const message = `✓ IP cleared (${data.cleared_count} IPs removed)`;
+          updateTestStatus(message, 'var(--accent-green)');
+          updateResponsePanel(`Status: ${response.status} OK\nAction: Clear All\nCleared: ${data.cleared_count} blocked IPs\nMessage: ${data.message}`);
+          console.log('[CLEAR-IP] SUCCESS:', message);
+        } else {
+          const errorMsg = data?.message || 'Unknown error';
+          updateTestStatus('Failed to clear IP', 'var(--accent-red)');
+          updateResponsePanel(`Status: ${response.status}\nError: ${errorMsg}`);
+          console.log('[CLEAR-IP] FAILED:', errorMsg);
+        }
+      } catch (error) {
+        updateTestStatus('Error clearing IP', 'var(--accent-red)');
+        updateResponsePanel(`Error: ${error.message}`);
+        console.error('[CLEAR-IP] Exception:', error);
+      } finally {
+        setTimeout(() => {
+          isRequestCooldown = false;
+          console.log('[COOLDOWN] 2s cooldown expired');
+        }, REQUEST_COOLDOWN_MS);
+      }
+    }
+
+    async function performTestRequest(path, method = 'GET', payload = null) {
+      if (isRequestCooldown) {
+        updateTestStatus('Please wait before sending another request (2s cooldown)', 'var(--accent-yellow)');
+        return;
+      }
+
+      try {
+        isRequestCooldown = true;
+        const requestId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+        console.log(`\n[${requestId}] ========== NEW REQUEST ==========`);
+        console.log(`[${requestId}] Method: ${method}`);
+        console.log(`[${requestId}] Path: ${path}`);
+        
+        updateTestStatus(`Sending ${method} ${path}`, 'var(--accent-blue)');
+        const token = await getGatewayToken();
+        
+        const options = {
+          method,
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`,
+          },
+        };
+        
+        if (payload !== null) {
+          options.body = JSON.stringify(payload);
+          console.log(`[${requestId}] Payload:`, payload);
+        }
+
+        console.log(`[${requestId}] Headers:`, {
+          'Content-Type': options.headers['Content-Type'],
+          'Authorization': 'Bearer [token]',
+        });
+
+        const start = performance.now();
+        const response = await fetch(`${API_URL}${path}`, options);
+        const duration = Math.round(performance.now() - start);
+        
+        // Extract WAF headers for detailed blocking reason
+        const wafStatus = response.headers.get('x-waf-status');
+        const wafReason = response.headers.get('x-waf-reason');
+        
+        console.log(`[${requestId}] Response Status: ${response.status}`);
+        console.log(`[${requestId}] Response Headers:`, {
+          'x-waf-status': wafStatus,
+          'x-waf-reason': wafReason,
+          'content-type': response.headers.get('content-type')
+        });
+        console.log(`[${requestId}] Response Time: ${duration}ms`);
+        
+        // Safe response body parsing
+        let bodyText = '';
+        try {
+          bodyText = await response.text();
+          if (!bodyText) {
+            bodyText = '(empty response)';
+          }
+        } catch (parseError) {
+          console.error(`[${requestId}] Could not read response body:`, parseError.message);
+          bodyText = '(error reading response)';
+        }
+        
+        const statusInfo = getStatusClass(response.status, '', wafStatus, wafReason);
+        
+        // Verification logging
+        console.log(`[${requestId}] Status Text: ${statusInfo.statusText}`);
+        console.log(`[${requestId}] Status Class: ${statusInfo.statusClass}`);
+        console.log(`[${requestId}] ========== REQUEST COMPLETE ==========\n`);
+        
+        updateResponsePanel(`Status: ${response.status} (${statusInfo.statusText})\nTime: ${duration} ms\nResponse:\n${bodyText}`);
+        updateTestStatus(`Completed - ${statusInfo.statusText}`, statusInfo.color);
+      } catch (error) {
+        console.error('[ERROR] Request failed:', error.message);
+        updateResponsePanel(`Error: ${error.message}`);
+        updateTestStatus('Request failed', 'var(--accent-red)');
+      } finally {
+        setTimeout(() => {
+          isRequestCooldown = false;
+          console.log('[COOLDOWN] 2s cooldown expired, ready for next request');
+        }, REQUEST_COOLDOWN_MS);
+      }
+    }
+
+    async function sendBurstRequests() {
+      await performTestRequest('/users', 'GET');
+      await performTestRequest('/test-waf', 'POST', { query: '1 UNION SELECT password FROM users' });
+      await performTestRequest('/test-waf', 'POST', { input: '<script>alert(1)</script>' });
+    }
+
+    function bindTestButtons() {
+      document.getElementById('normal-request')?.addEventListener('click', () => performTestRequest('/users', 'GET'));
+      document.getElementById('sql-request')?.addEventListener('click', () => performTestRequest('/test-waf', 'POST', { query: '1 UNION SELECT password FROM users' }));
+      document.getElementById('xss-request')?.addEventListener('click', () => performTestRequest('/test-waf', 'POST', { input: '<script>alert(1)</script>' }));
+      document.getElementById('clear-ip-button')?.addEventListener('click', () => clearBlockedIP());
+
+      const burstButton = document.getElementById('send-test-request');
+      const stopButton = document.getElementById('stop-test-request');
+      burstButton?.addEventListener('click', () => {
+        if (isSendingTestRequests) return;
+        isSendingTestRequests = true;
+        burstButton.disabled = true;
+        stopButton.disabled = false;
+        updateTestStatus('Burst mode started...');
+        updateResponsePanel('');
+        sendBurstRequests();
+        testRequestInterval = setInterval(sendBurstRequests, 4000);
+      });
+      stopButton?.addEventListener('click', () => {
+        if (testRequestInterval) clearInterval(testRequestInterval);
+        testRequestInterval = null;
+        isSendingTestRequests = false;
+        burstButton.disabled = false;
+        stopButton.disabled = true;
+        updateTestStatus('Burst mode stopped.', 'var(--accent-green)');
+      });
+    }
+
+    async function sendBurstRequests() {
+      await performTestRequest('/users', 'GET');
+      await performTestRequest('/test-waf', 'POST', { query: '1 UNION SELECT password FROM users' });
+      await performTestRequest('/test-waf', 'POST', { input: '<script>alert(1)</script>' });
+    }
+
+    function appendTrafficRow(log) {
+      const tableBody = document.getElementById('traffic-body');
+      if (!tableBody) return;
+
+      const status = getStatusClass(log.status || 200, log.reason, log.waf_status, log.waf_reason);
+      const row = document.createElement('tr');
+      row.innerHTML = `
+        <td>${formatTime(log.time)}</td>
+        <td>${log.ip || 'N/A'}</td>
+        <td>${log.endpoint || 'N/A'}</td>
+        <td>${log.method || 'GET'}</td>
+        <td class="status-cell ${status.statusClass}">
+          <span class="status-dot-small" style="background-color: ${status.color};"></span>
+          <span class="status-text">${status.statusText}</span>
+        </td>
+        <td>${log.reason || ''}</td>
+      `;
+      tableBody.prepend(row);
+      while (tableBody.childNodes.length > 100) {
+        tableBody.removeChild(tableBody.lastChild);
+      }
+    }
+
+    function appendLogLine(log) {
+      const logsList = document.getElementById('logs-list');
+      if (!logsList) return;
+      const logLine = document.createElement('div');
+      logLine.className = 'log-line';
+      const displayReason = log.reason ? ` (${log.reason})` : '';
+      logLine.textContent = `[${formatTime(log.time)}] ${log.method || 'GET'} ${log.endpoint || 'N/A'} - ${log.status || 0} from ${log.ip || 'N/A'}${displayReason}`;
+      logsList.prepend(logLine);
+      while (logsList.childNodes.length > 100) {
+        logsList.removeChild(logsList.lastChild);
+      }
+    }
+
+    async function sendSingleTestRequest(requestDef) {
+      const start = Date.now();
+      const url = `${API_URL}${requestDef.path}`;
+      const requestId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      
+      try {
+        if (!TEST_TOKEN) {
+          TEST_TOKEN = await getGatewayToken();
+        }
+        
+        console.log(`[${requestId}] Burst request: ${requestDef.method} ${requestDef.path}`);
+        
+        const headers = {
+          Authorization: `Bearer ${TEST_TOKEN}`,
+          'Content-Type': 'application/json',
+          'X-API-Key': TEST_API_KEY
+        };
+        const options = {
+          method: requestDef.method,
+          headers,
+        };
+        if (requestDef.body) {
+          options.body = JSON.stringify(requestDef.body);
+          console.log(`[${requestId}] Payload:`, requestDef.body);
+        }
+
+        const response = await fetch(url, options);
+        const elapsed = Date.now() - start;
+        const status = response.status;
+        
+        // Extract WAF headers for precise blocking reason
+        const wafStatus = response.headers.get('x-waf-status');
+        const wafReason = response.headers.get('x-waf-reason');
+        
+        console.log(`[${requestId}] Response: ${status} | WAF: ${wafStatus} | Reason: ${wafReason}`);
+
+        let responseBody = null;
+        try {
+          const bodyText = await response.text();
+          if (bodyText) {
+            try {
+              responseBody = JSON.parse(bodyText);
+            } catch {
+              responseBody = bodyText;
+            }
+          }
+        } catch (e) {
+          console.error(`[${requestId}] Could not read response:`, e.message);
+          responseBody = { error: 'Could not parse response' };
+        }
+
+        const responseDetail = typeof responseBody === 'object' && responseBody !== null
+          ? responseBody.detail || JSON.stringify(responseBody)
+          : responseBody;
+
+        // Determine display reason using WAF headers
+        let displayReason = '';
+        if (wafStatus === 'block') {
+          displayReason = wafReason ? wafReason.replace(/_/g, ' ') : 'WAF block';
+        } else if (status >= 400) {
+          displayReason = (typeof responseDetail === 'string' ? responseDetail : JSON.stringify(responseDetail)).substring(0, 50);
+        }
+
+        const logEntry = {
+          time: new Date().toISOString(),
+          ip: '127.0.0.1',
+          endpoint: requestDef.path,
+          method: requestDef.method,
+          status,
+          reason: displayReason,
+          response: responseBody,
+          response_time_ms: elapsed,
+          waf_status: wafStatus,
+          waf_reason: wafReason
+        };
+        appendTrafficRow(logEntry);
+        appendLogLine(logEntry);
+
+        return status;
+      } catch (error) {
+        console.error(`[${requestId}] Request error:`, error.message);
+        const failedEntry = {
+          time: new Date().toISOString(),
+          ip: '127.0.0.1',
+          endpoint: requestDef.path,
+          method: requestDef.method,
+          status: 0,
+          response: error.message,
+          response_time_ms: Date.now() - start,
+          reason: 'Request failed'
+        };
+        appendTrafficRow(failedEntry);
+        appendLogLine(failedEntry);
+        return 0;
+      }
+    }
+
+    function getRandomByType(type) {
+      const candidates = TEST_TEMPLATES.filter(item => item.type === type);
+      return candidates[Math.floor(Math.random() * candidates.length)];
+    }
+
+    function shuffleArray(array) {
+      for (let i = array.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [array[i], array[j]] = [array[j], array[i]];
+      }
+      return array;
+    }
+
+    function buildRequestBatch() {
+      const batch = [];
+      // Send a large batch every interval to quickly trigger rate limit
+      // 1 allowed
+      batch.push({ ...getRandomByType('allowed') });
+      // 1-2 alerts
+      batch.push({ ...getRandomByType('alert') });
+      batch.push({ ...getRandomByType('alert') });
+      // 1 block
+      batch.push({ ...getRandomByType('block') });
+      // 20 random mix to ensure rate-limit triggers
+      for (let i = 0; i < 20; i++) {
+        batch.push({ ...TEST_TEMPLATES[Math.floor(Math.random() * TEST_TEMPLATES.length)] });
+      }
+      return shuffleArray(batch);
+    }
+
+    async function startTestRequests() {
+      if (isSendingTestRequests) return;
+      isSendingTestRequests = true;
+      requestBatchId += 1;
+      const currentBatch = requestBatchId;
+
+      const sendButton = document.getElementById('send-test-request');
+      const stopButton = document.getElementById('stop-test-request');
+      if (sendButton) sendButton.disabled = true;
+      if (stopButton) stopButton.disabled = false;
+      updateTestStatus('Sending burst requests… (expect rate-limit 429s after ~25 requests)', 'var(--accent-yellow)');
+
+      async function sendBurst() {
+        if (!isSendingTestRequests || currentBatch !== requestBatchId) return;
+        const batch = buildRequestBatch();
+        console.log(`Sending batch of ${batch.length} requests`);
+        await Promise.all(batch.map(sendSingleTestRequest));
+        // Fetch updates after each burst
+        await fetchDashboard();
+        await fetchAlerts();
+        await fetchWAFAlerts();
+      }
+
+      await sendBurst();
+      testRequestInterval = setInterval(sendBurst, 300);  // Send burst every 300ms
+    }
+
+    function stopTestRequests() {
+      if (!isSendingTestRequests) return;
+      isSendingTestRequests = false;
+      requestBatchId += 1;
+      if (testRequestInterval) {
+        clearInterval(testRequestInterval);
+        testRequestInterval = null;
+      }
+      const sendButton = document.getElementById('send-test-request');
+      const stopButton = document.getElementById('stop-test-request');
+      if (sendButton) sendButton.disabled = false;
+      if (stopButton) stopButton.disabled = true;
+      updateTestStatus('Stopped sending requests.', 'var(--accent-green)');
+    }
+
+    function initDashboard() {
+      bindTestButtons();
+      fetchDashboard();
+      fetchAlerts();
+      fetchWAFAlerts();
+      setInterval(fetchDashboard, 3000);
+      setInterval(fetchAlerts, 5000);
+      setInterval(fetchWAFAlerts, 5000);
+      
+      // Make verification test available in console
+      window.WAFVerificationTest = {
+        sendSQL: () => performTestRequest('/test-waf', 'POST', { query: '1 UNION SELECT password FROM users' }),
+        sendXSS: () => performTestRequest('/test-waf', 'POST', { input: '<script>alert(1)</script>' }),
+        sendNormal: () => performTestRequest('/users', 'GET'),
+        clearIP: () => clearBlockedIP(),
+        status: () => {
+          console.log('=== WAF Demo Status ===');
+          console.log('Cooldown active:', isRequestCooldown);
+          console.log('Current time:', new Date().toLocaleTimeString());
+          console.log('\nTest commands:');
+          console.log('  WAFVerificationTest.sendSQL()    - Send SQL injection payload');
+          console.log('  WAFVerificationTest.sendXSS()    - Send XSS payload');
+          console.log('  WAFVerificationTest.sendNormal() - Send normal GET request');
+          console.log('  WAFVerificationTest.clearIP()    - Clear blocked IP');
+          console.log('  WAFVerificationTest.status()     - Show this status');
+        }
+      };
+      
+      console.log('%c🔐 WAF Demo Started', 'color: #0f9d58; font-weight: bold; font-size: 14px;');
+      console.log('%cOpen DevTools Console and run: WAFVerificationTest.status()', 'color: #94a3b8;');
+    }
+
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', initDashboard);
+    } else {
+      initDashboard();
+    }
+  </script>
+</body>
+</html>

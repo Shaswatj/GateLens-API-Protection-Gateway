@@ -12,7 +12,7 @@ with httpx.Client(timeout=10.0) as client:
 
     r = client.post(
         f'{base_gateway}/login',
-        json={'username': 'admin', 'password': 'password'},
+        json={'username': 'admin', 'password': 'admin'},
         headers={'x-api-key': 'hackathon2026'},
     )
     print('LOGIN', r.status_code, r.text)
